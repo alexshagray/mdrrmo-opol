@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,16 @@ import {
   StatusBar,
   Modal,
   Linking,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { CallDetectorModule } from 'expo-call-detector';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
 import { savePatientCareReport, fetchUserProfile } from '@/services/api';
 import { getSocket, initializeSocket } from '@/services/socket';
 import { useAuth } from '@/context/AuthContext';
@@ -60,15 +65,14 @@ export default function TrackingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Parse caller parameters, fall back to mock details if empty
   const parsedCallerInfo = params.callerInfo ? JSON.parse(params.callerInfo as string) : null;
   const callerInfo = {
-    id: parsedCallerInfo?.id || 'INC-1002',
-    name: parsedCallerInfo?.name || (params.callerName as string) || 'Unknown Caller',
-    number: parsedCallerInfo?.number || (params.callerNumber as string) || 'Unknown Number',
-    victimName: parsedCallerInfo?.victimName || (params.victimName as string) || 'Unknown',
-    tracker: parsedCallerInfo?.tracker || 'Tracker-01',
-    description: parsedCallerInfo?.description || (params.details as string) || 'No additional details provided.',
+    id: parsedCallerInfo?.id || '',
+    name: parsedCallerInfo?.name || (params.callerName as string) || '',
+    number: parsedCallerInfo?.number || (params.callerNumber as string) || '',
+    victimName: parsedCallerInfo?.victimName || (params.victimName as string) || '',
+    tracker: parsedCallerInfo?.tracker || '',
+    description: parsedCallerInfo?.description || (params.details as string) || '',
   };
 
   const isRegistered = params.isRegistered !== undefined 
@@ -82,20 +86,30 @@ export default function TrackingScreen() {
   const barangay = (params.barangay as string) || '';
   const purok = (params.purok as string) || '';
   const landmark = (params.landmark as string) || '';
-  const callerType = (params.callerType as string) || 'Visitor';
+  const callerType = (params.callerType as string) || '';
   
   const accidentAddress = barangay 
     ? `${purok ? purok + ', ' : ''}${barangay}${landmark ? ' (Near: ' + landmark + ')' : ''}` 
-    : (landmark ? landmark : 'Purok 5, Riverside, Opol, Misamis Oriental');
+    : (landmark ? landmark : '');
 
   // Navigation and State Systems
   const [alertAccepted, setAlertAccepted] = useState(true);
-  const [isActiveCall, setIsActiveCall] = useState(true);
-  const [isPhoneCallActive, setIsPhoneCallActive] = useState(true);
+  const hasActiveEmergency = !!(params.callerNumber || emergencyType || parsedCallerInfo);
+  const [isActiveCall, setIsActiveCall] = useState(hasActiveEmergency);
+  const [isPhoneCallActive, setIsPhoneCallActive] = useState(false);
   const [responderLocation, setResponderLocation] = useState<Coordinate | null>(null);
+  const [initialDispatchLocation, setInitialDispatchLocation] = useState<Coordinate | null>(null);
+  const [distanceToIncident, setDistanceToIncident] = useState<number | null>(null);
+  const [callTime, setCallTime] = useState('');
+
+  // Auto-generate timestamp when mounted
+  useEffect(() => {
+    setCallTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  }, []);
   const [callerLocation, setCallerLocation] = useState<Coordinate | null>(passedCallerLocation || null);
   const [incidentLocation, setIncidentLocation] = useState<Coordinate | null>(null);
   const [responderInfo, setResponderInfo] = useState<{ id: number; name: string } | null>(null);
+  const recordedTimes = useRef({ dispatched: false, enRoute: false });
 
 
   const [isRespondingRoute, setIsRespondingRoute] = useState(true);
@@ -115,11 +129,54 @@ export default function TrackingScreen() {
   const [isSimulating, setIsSimulating] = useState(false);
 
   // Response Status
-  const [incidentStatus, setIncidentStatus] = useState('Dispatched');
+  const [incidentStatus, setIncidentStatus] = useState('Assigned');
+
+  const { height: screenHeight } = Dimensions.get('window');
+  const mapHeightValue = useRef(screenHeight * 0.45);
+  const mapHeight = useRef(new Animated.Value(mapHeightValue.current)).current;
+  
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (evt, gestureState) => {
+        let newHeight = mapHeightValue.current + gestureState.dy;
+        if (newHeight < 150) newHeight = 150;
+        if (newHeight > screenHeight - 200) newHeight = screenHeight - 200;
+        mapHeight.setValue(newHeight);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        let newHeight = mapHeightValue.current + gestureState.dy;
+        if (newHeight < 150) newHeight = 150;
+        if (newHeight > screenHeight - 200) newHeight = screenHeight - 200;
+        mapHeightValue.current = newHeight;
+      }
+    })
+  ).current;
 
   // Incident tagging removed as location is now auto-geocoded
 
   // Initialize socket client and fetch profile
+  useEffect(() => {
+    const stateSubscription = CallDetectorModule.addListener('onCallStateChanged', ({ state }: { state: number }) => {
+      // 1=Ringing, 2=Dialing, 3=Active, 5=Disconnected
+      if (state === 1 || state === 2 || state === 3) {
+        setIsPhoneCallActive(true);
+      } else if (state === 5) {
+        setIsPhoneCallActive(false);
+      }
+    });
+
+    const removedSubscription = CallDetectorModule.addListener('onCallRemoved', () => {
+      setIsPhoneCallActive(false);
+    });
+
+    return () => {
+      stateSubscription.remove();
+      removedSubscription.remove();
+    };
+  }, []);
+
   useEffect(() => {
     initializeSocket();
     (async () => {
@@ -227,6 +284,7 @@ export default function TrackingScreen() {
         longitude: initialLoc.coords.longitude,
       };
       setResponderLocation(currentLoc);
+      setInitialDispatchLocation(currentLoc);
 
       let finalCallerLoc = passedCallerLocation;
       if (!finalCallerLoc) {
@@ -291,6 +349,38 @@ export default function TrackingScreen() {
       Speech.stop();
     };
   }, [isSimulating]);
+
+  // Auto status update monitor
+  useEffect(() => {
+    if (!responderLocation || !initialDispatchLocation || !incidentLocation) return;
+    
+    const distFromStart = getDistance(
+      initialDispatchLocation.latitude,
+      initialDispatchLocation.longitude,
+      responderLocation.latitude,
+      responderLocation.longitude
+    );
+
+    const distToTarget = getDistance(
+      responderLocation.latitude,
+      responderLocation.longitude,
+      incidentLocation.latitude,
+      incidentLocation.longitude
+    );
+    setDistanceToIncident(distToTarget);
+
+    if (distFromStart >= 50 && !recordedTimes.current.dispatched) {
+      recordedTimes.current.dispatched = true;
+      if (incidentStatus === 'Assigned') setIncidentStatus('Dispatched');
+      FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'dispatchTime.txt', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })).catch(() => {});
+    }
+
+    if (distFromStart >= 150 && !recordedTimes.current.enRoute) {
+      recordedTimes.current.enRoute = true;
+      setIncidentStatus('En Route');
+      FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'enRouteTime.txt', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })).catch(() => {});
+    }
+  }, [responderLocation, initialDispatchLocation, incidentLocation]);
 
   // Voice TTS rules monitor
   useEffect(() => {
@@ -452,19 +542,19 @@ export default function TrackingScreen() {
 
   if (!isActiveCall) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center' }]}>
+      <SafeAreaView edges={['top']} style={[styles.screen, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
         <View style={styles.backgroundGlowTop} />
         <View style={styles.backgroundGlowBottom} />
         <Ionicons name="checkmark-done-circle" size={80} color="#34c759" />
         <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700', marginTop: 16 }}>Awaiting Dispatch</Text>
         <Text style={{ color: '#8e8e93', fontSize: 16, marginTop: 8 }}>You have no active emergency call.</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="light-content" />
       <View style={styles.backgroundGlowTop} />
       <View style={styles.backgroundGlowBottom} />
@@ -475,7 +565,11 @@ export default function TrackingScreen() {
 
 
           {/* Map Container */}
-          <View style={[styles.mapContainer, { marginTop: 0 }]}>
+          <Animated.View style={[styles.mapContainer, { marginTop: 0, position: 'relative', flex: undefined, height: mapHeight }]}>
+            {/* Grabber Area */}
+            <View {...panResponder.panHandlers} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 32, justifyContent: 'center', alignItems: 'center', zIndex: 1000, backgroundColor: 'transparent' }}>
+              <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.7)', marginBottom: 8 }} />
+            </View>
             {isGeocoding ? (
               <View style={styles.mapLoading}>
                 <ActivityIndicator size="large" color="#0a84ff" />
@@ -504,7 +598,7 @@ export default function TrackingScreen() {
                 </View>
               </View>
             )}
-          </View>
+          </Animated.View>
 
           {/* Bottom Info Card matching Image 1 exactly */}
           <View style={[styles.bottomCard, { paddingVertical: 12, paddingHorizontal: 16 }]}>
@@ -523,7 +617,7 @@ export default function TrackingScreen() {
                     <Ionicons name="location" size={16} color="#ef4544" style={styles.detailIcon} />
                     <Text style={styles.detailLabel}>Location</Text>
                   </View>
-                  <Text style={[styles.detailValue, { flex: 0.65, textAlign: 'right' }]}>{accidentAddress}</Text>
+                  <Text style={styles.detailValue}>{accidentAddress}</Text>
                 </View>
 
                 <View style={styles.detailItem}>
@@ -555,45 +649,22 @@ export default function TrackingScreen() {
                     <Ionicons name="time" size={16} color="#0a84ff" style={styles.detailIcon} />
                     <Text style={styles.detailLabel}>Time</Text>
                   </View>
-                  <Text style={styles.detailValue}>Today • 9:32 AM</Text>
+                  <Text style={styles.detailValue}>Today • {callTime}</Text>
                 </View>
 
-                <View style={[styles.detailItem, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                  <View style={styles.detailItemLeft}>
-                    <Ionicons name="document-text" size={16} color="#8e8e93" style={styles.detailIcon} />
-                    <Text style={styles.detailLabel}>Description</Text>
-                  </View>
-                  <Text style={[styles.detailValue, { flex: 0.65, textAlign: 'right', lineHeight: 16 }]}>
-                    {callerInfo.description}
-                  </Text>
-                </View>
+
               </View>
             </ScrollView>
             
-            <View style={{ marginTop: 8, marginBottom: 16 }}>
-              <Text style={[styles.label, { marginBottom: 8 }]}>Response Status:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {['Dispatched', 'En Route', 'On Scene', 'Transporting', 'Completed'].map((statusOption) => (
-                  <TouchableOpacity
-                    key={statusOption}
-                    style={[
-                      styles.statusSelectBtn,
-                      incidentStatus === statusOption && styles.statusSelectBtnActive
-                    ]}
-                    onPress={() => setIncidentStatus(statusOption)}
-                  >
-                    <Text style={[
-                      styles.statusSelectText,
-                      incidentStatus === statusOption && styles.statusSelectTextActive
-                    ]}>{statusOption}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+
 
             <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
                 <TouchableOpacity 
-                  style={[styles.submitButton, { flex: 1, backgroundColor: '#34c759', shadowColor: '#34c759' }]}
+                  style={[
+                    styles.submitButton, 
+                    { flex: 1, backgroundColor: isPhoneCallActive ? '#555' : '#34c759', shadowColor: isPhoneCallActive ? 'transparent' : '#34c759' }
+                  ]}
+                  disabled={isPhoneCallActive}
                   onPress={() => {
                     const rawNumber = callerInfo.number || '';
                     const cleanNumber = rawNumber.replace(/[^\d+]/g, '');
@@ -615,7 +686,7 @@ export default function TrackingScreen() {
                   }}
                 >
                   <Ionicons name="call" size={18} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.submitButtonText}>Call</Text>
+                  <Text style={styles.submitButtonText}>{isPhoneCallActive ? 'In Call...' : 'Call'}</Text>
                 </TouchableOpacity>
 
               <TouchableOpacity 
@@ -658,17 +729,29 @@ export default function TrackingScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[styles.submitButton, { backgroundColor: '#ff453a', shadowColor: '#ff453a' }]}
+                style={[
+                  styles.submitButton, 
+                  { 
+                    backgroundColor: distanceToIncident !== null && distanceToIncident <= 300 ? '#ff453a' : '#555', 
+                    shadowColor: distanceToIncident !== null && distanceToIncident <= 300 ? '#ff453a' : 'transparent' 
+                  }
+                ]}
+                disabled={distanceToIncident === null || distanceToIncident > 300}
                 onPress={() => {
                   Alert.alert(
-                    'Confirm Arrival',
-                    'Are you sure you have arrived at the incident scene?',
+                    "Confirm Arrival",
+                    "Are you sure you have arrived at the incident location?",
                     [
-                      { text: 'Not Yet', style: 'cancel' },
+                      { text: "Cancel", style: "cancel" },
                       { 
-                        text: 'Yes, Arrived', 
-                        style: 'default',
+                        text: "Yes, Arrived", 
                         onPress: () => {
+                          setIncidentStatus('On Scene');
+                          FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'onSceneTime.txt', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })).catch(() => {});
+                          setIsRespondingRoute(false);
+                          setRouteCoordinates([]);
+                          setRouteSteps([]);
+                          speakGuidance('You have successfully arrived at the scene.');
                           Speech.stop();
                           setIsActiveCall(false);
                           router.push({
@@ -702,7 +785,7 @@ export default function TrackingScreen() {
         </View>
 
       {/* Incident Area Selection Modal removed */}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -949,9 +1032,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   detailValue: {
+    flex: 0.65,
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
+    textAlign: 'right',
   },
   respondRow: {
     flexDirection: 'row',

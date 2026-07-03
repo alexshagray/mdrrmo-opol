@@ -173,10 +173,15 @@ export const updateUserProfile = async (name: string, email: string, password?: 
 
 export interface IncidentPayload {
   incident_id: string;
+  caller_name?: string;
   caller_number: string;
   latitude: number;
   longitude: number;
+  emergency_type?: string;
   status: string;
+  barangay?: string;
+  purok?: string;
+  landmark?: string;
 }
 
 export const checkResidentDatabase = async (phoneNumber: string) => {

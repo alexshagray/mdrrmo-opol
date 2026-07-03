@@ -318,8 +318,8 @@ export default function HomeScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.backgroundGlowTop} />
-      <View style={styles.backgroundGlowBottom} />
+      <View style={styles.backgroundGlowTop} pointerEvents="none" />
+      <View style={styles.backgroundGlowBottom} pointerEvents="none" />
 
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
@@ -351,23 +351,102 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Inactive State Visualizer */}
+        {/* Dashboard UI when Idle */}
         {!isCallDetected && (
-          <View style={styles.visualizerCard}>
-            <View style={styles.radarRing}>
-              <Ionicons name="radio" size={48} color="#0a84ff" style={styles.radarIcon} />
-            </View>
-            <Text style={styles.visualizerTitle}>Monitoring Dispatch WebSockets</Text>
-            <Text style={styles.visualizerSubtitle}>
-              You will receive real-time dispatches from residents immediately. Tap simulator drawer below to test the connection.
-            </Text>
+          <View style={styles.dashboardContainer}>
             
-            <TouchableOpacity 
-              style={{ marginTop: 24, backgroundColor: '#0a84ff', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, elevation: 4 }}
-              onPress={() => router.push({ pathname: '/incoming-call', params: { phoneNumber: '+639500905679' }})}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Test Incoming Call UI</Text>
-            </TouchableOpacity>
+            {/* Quick Stats */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <View style={styles.statHeader}>
+                  <Ionicons name="shield-checkmark" size={20} color="#34c759" />
+                  <Text style={styles.statLabel}>Shift Status</Text>
+                </View>
+                <Text style={styles.statValue}>On Duty</Text>
+                <Text style={styles.statSubText}>Monitoring WebSockets</Text>
+              </View>
+              <View style={styles.statCard}>
+                <View style={styles.statHeader}>
+                  <Ionicons name="document-text" size={20} color="#0a84ff" />
+                  <Text style={styles.statLabel}>PCRs Today</Text>
+                </View>
+                <Text style={styles.statValue}>0</Text>
+                <Text style={styles.statSubText}>Drafts cleared</Text>
+              </View>
+            </View>
+
+            {/* Weather / Condition */}
+            <View style={styles.weatherCard}>
+              <View style={styles.weatherHeader}>
+                <Ionicons name="partly-sunny" size={36} color="#ffcc00" />
+                <View style={{ marginLeft: 16, flex: 1 }}>
+                  <Text style={styles.weatherTitle}>Opol, Misamis Oriental</Text>
+                  <Text style={styles.weatherSubtitle}>Clear Skies • Optimal</Text>
+                </View>
+              </View>
+              <View style={styles.weatherDivider} />
+              <Text style={styles.weatherMessage}>Current conditions are safe for dispatch operations. No active severe weather warnings in your area.</Text>
+            </View>
+
+            {/* Quick Actions Grid */}
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <View style={styles.actionGrid}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(tabs)/tracking')}>
+                <View style={[styles.actionIconBg, { backgroundColor: 'rgba(52, 199, 89, 0.15)' }]}>
+                  <Ionicons name="map" size={24} color="#34c759" />
+                </View>
+                <Text style={styles.actionText}>View Map</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/(tabs)/manage')}>
+                <View style={[styles.actionIconBg, { backgroundColor: 'rgba(10, 132, 255, 0.15)' }]}>
+                  <Ionicons name="folder-open" size={24} color="#0a84ff" />
+                </View>
+                <Text style={styles.actionText}>Manage PCRs</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/incoming-call', params: { phoneNumber: '+639500905679' }})}>
+                <View style={[styles.actionIconBg, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
+                  <Ionicons name="call" size={24} color="#ff9500" />
+                </View>
+                <Text style={styles.actionText}>Test Call UI</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert('Sync Complete', 'All offline data is synced.')}>
+                <View style={[styles.actionIconBg, { backgroundColor: 'rgba(191, 90, 242, 0.15)' }]}>
+                  <Ionicons name="sync" size={24} color="#bf5af2" />
+                </View>
+                <Text style={styles.actionText}>Sync Data</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Recent Activity */}
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <View style={styles.activityList}>
+              <View style={styles.activityItem}>
+                <View style={styles.activityDot} />
+                <View style={styles.activityLine} />
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>Shift Started</Text>
+                  <Text style={styles.activityTime}>Today, 08:00 AM</Text>
+                </View>
+              </View>
+              <View style={styles.activityItem}>
+                <View style={styles.activityDotBlue} />
+                <View style={styles.activityLine} />
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>System Sync Successful</Text>
+                  <Text style={styles.activityTime}>Yesterday, 23:45 PM</Text>
+                </View>
+              </View>
+              <View style={styles.activityItem}>
+                <View style={styles.activityDotBlue} />
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>App Updated</Text>
+                  <Text style={styles.activityTime}>Yesterday, 14:30 PM</Text>
+                </View>
+              </View>
+            </View>
 
           </View>
         )}
@@ -1254,6 +1333,172 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  dashboardContainer: {
+    width: '100%',
+    paddingBottom: 40,
+    marginTop: 10,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#111115',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  statHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statLabel: {
+    color: '#8e8e93',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginLeft: 6,
+  },
+  statValue: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  statSubText: {
+    color: '#666',
+    fontSize: 11,
+  },
+  weatherCard: {
+    backgroundColor: 'rgba(10, 132, 255, 0.08)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(10, 132, 255, 0.2)',
+    marginBottom: 24,
+    marginHorizontal: 4,
+  },
+  weatherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weatherTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  weatherSubtitle: {
+    color: '#0a84ff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  weatherDivider: {
+    height: 1,
+    backgroundColor: 'rgba(10, 132, 255, 0.15)',
+    marginVertical: 12,
+  },
+  weatherMessage: {
+    color: '#8da5c8',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  sectionTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+    marginLeft: 8,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    marginHorizontal: 4,
+  },
+  actionButton: {
+    width: '48%',
+    backgroundColor: '#111115',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  actionIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  actionText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activityList: {
+    backgroundColor: '#111115',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    marginHorizontal: 4,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  activityLine: {
+    position: 'absolute',
+    left: 4.5,
+    top: 14,
+    bottom: -20,
+    width: 1,
+    backgroundColor: '#2b2b36',
+  },
+  activityDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#34c759',
+    marginTop: 4,
+  },
+  activityDotBlue: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#0a84ff',
+    marginTop: 4,
+  },
+  activityContent: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  activityTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activityTime: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 4,
   },
 });
 

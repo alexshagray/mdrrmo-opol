@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Alert, TextInput } from 'react-native';
 import { fetchIncidents, deleteIncident } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -25,6 +25,7 @@ type Incident = {
 
 export default function CallLogsScreen() {
   const [calls, setCalls] = useState<Incident[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -34,7 +35,9 @@ export default function CallLogsScreen() {
       const response = await fetchIncidents();
       // The API returns paginated data (response.data) or a flat array depending on the backend.
       const data = response.data ? response.data : response;
-      setCalls(data);
+      // Safeguard: Limit to the 50 most recent calls to prevent memory crashes
+      const limitedData = Array.isArray(data) ? data.slice(0, 50) : data;
+      setCalls(limitedData);
     } catch (e) {
       console.warn('Failed to load call logs', e);
     } finally {
@@ -96,6 +99,15 @@ export default function CallLogsScreen() {
     );
   };
 
+  const filteredCalls = calls.filter(call => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const name = call.user ? `${call.user.first_name} ${call.user.last_name}`.toLowerCase() : (call.caller_name || '').toLowerCase();
+    const type = (call.emergency_type || '').toLowerCase();
+    const phone = (call.user?.phone_number || call.caller_number || '').toLowerCase();
+    return name.includes(q) || type.includes(q) || phone.includes(q);
+  });
+
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
@@ -115,6 +127,22 @@ export default function CallLogsScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={18} color="#8e8e93" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search name, type, or phone..."
+            placeholderTextColor="#8e8e93"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+              <Ionicons name="close-circle" size={18} color="#8e8e93" />
+            </TouchableOpacity>
+          )}
+        </View>
+
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0a84ff" />
@@ -122,7 +150,7 @@ export default function CallLogsScreen() {
           </View>
         ) : (
           <FlatList
-            data={calls}
+            data={filteredCalls}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderCallItem}
             contentContainerStyle={styles.list}
@@ -210,6 +238,25 @@ const styles = StyleSheet.create({
     borderColor: '#1f1f26',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111115',
+    borderWidth: 1,
+    borderColor: '#1f1f26',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 20,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 14,
   },
   list: {
     paddingBottom: 40,

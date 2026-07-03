@@ -176,8 +176,74 @@ export default function MapboxMap({
                     'line-opacity': 1
                 }
             });
+
+            map.addSource('incident-circle', {
+                'type': 'geojson',
+                'data': {
+                    "type": "FeatureCollection",
+                    "features": []
+                }
+            });
+
+            map.addLayer({
+                'id': 'incident-circle-fill',
+                'type': 'fill',
+                'source': 'incident-circle',
+                'paint': {
+                    'fill-color': '#ef4444',
+                    'fill-opacity': 0.2
+                }
+            });
+
+            map.addLayer({
+                'id': 'incident-circle-line',
+                'type': 'line',
+                'source': 'incident-circle',
+                'paint': {
+                    'line-color': '#ef4444',
+                    'line-width': 2,
+                    'line-dasharray': [2, 2]
+                }
+            });
+
+            const recenterBtn = document.createElement('div');
+            recenterBtn.innerHTML = '🎯 Recenter';
+            recenterBtn.style.position = 'absolute';
+            recenterBtn.style.bottom = '20px';
+            recenterBtn.style.right = '20px';
+            recenterBtn.style.backgroundColor = '#181822';
+            recenterBtn.style.color = '#fff';
+            recenterBtn.style.padding = '8px 12px';
+            recenterBtn.style.borderRadius = '16px';
+            recenterBtn.style.fontFamily = 'sans-serif';
+            recenterBtn.style.fontSize = '14px';
+            recenterBtn.style.fontWeight = 'bold';
+            recenterBtn.style.cursor = 'pointer';
+            recenterBtn.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
+            recenterBtn.style.display = 'none';
+            recenterBtn.style.zIndex = '999';
+            recenterBtn.style.border = '1px solid #2b2b36';
+            recenterBtn.onclick = () => {
+                window.userPanned = false;
+                recenterBtn.style.display = 'none';
+                if (window.latestStart) {
+                    map.flyTo({ center: window.latestStart, zoom: 16, pitch: 45 });
+                }
+            };
+            document.body.appendChild(recenterBtn);
+
+            map.on('dragstart', () => { 
+                window.userPanned = true; 
+                recenterBtn.style.display = 'block';
+            });
+            map.on('touchstart', () => {
+                window.userPanned = true; 
+                recenterBtn.style.display = 'block';
+            });
         });
 
+        window.userPanned = false;
+        window.latestStart = null;
         let latestRouteCoords = [];
 
         async function getRoute(start, end) {
@@ -284,6 +350,33 @@ export default function MapboxMap({
                 bounds.extend(lngLat);
                 hasPoints = true;
                 
+                if (map.getSource('incident-circle')) {
+                    const radiusKm = 0.1; // 100 meters
+                    const points = 64;
+                    const distanceX = radiusKm / (111.320 * Math.cos(lngLat[1] * Math.PI / 180));
+                    const distanceY = radiusKm / 110.574;
+                    const coords = [];
+                    for(let i = 0; i < points; i++) {
+                        const theta = (i / points) * (2 * Math.PI);
+                        coords.push([
+                            lngLat[0] + distanceX * Math.cos(theta),
+                            lngLat[1] + distanceY * Math.sin(theta)
+                        ]);
+                    }
+                    coords.push(coords[0]);
+
+                    map.getSource('incident-circle').setData({
+                        "type": "FeatureCollection",
+                        "features": [{
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [coords]
+                            }
+                        }]
+                    });
+                }
+                
                 if (!incidentMarker) {
                     incidentMarker = new mapboxgl.Marker({ element: createMarkerElement('⚠️', '#ef4444') })
                         .setLngLat(lngLat)
@@ -291,9 +384,17 @@ export default function MapboxMap({
                 } else {
                     incidentMarker.setLngLat(lngLat);
                 }
-            } else if (incidentMarker) {
-                if (incidentMarker) incidentMarker.remove();
-                incidentMarker = null;
+            } else {
+                if (map.getSource('incident-circle')) {
+                    map.getSource('incident-circle').setData({
+                        "type": "FeatureCollection",
+                        "features": []
+                    });
+                }
+                if (incidentMarker) {
+                    incidentMarker.remove();
+                    incidentMarker = null;
+                }
             }
 
             // Fit Bounds
@@ -305,11 +406,14 @@ export default function MapboxMap({
             if (data.isResponding && data.responderLocation && data.incidentLocation) {
                 const start = [data.responderLocation.longitude, data.responderLocation.latitude];
                 const end = [data.incidentLocation.longitude, data.incidentLocation.latitude];
+                window.latestStart = start;
                 
                 getRoute(start, end);
                 
                 // Keep camera centered on responder when routing
-                map.flyTo({ center: start, zoom: 16, pitch: 45 });
+                if (!window.userPanned) {
+                    map.flyTo({ center: start, zoom: 16, pitch: 45 });
+                }
             } else {
                 if (map.getSource('route')) {
                     map.getSource('route').setData({

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,12 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
-  FlatList
+  FlatList,
+  Modal
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
 import { searchResidents, savePatientCareReport, fetchUserProfile } from '@/services/api';
 
 export default function PCRScreen() {
@@ -106,6 +108,115 @@ export default function PCRScreen() {
   const [witnessName, setWitnessName] = useState('');
   const [isSigned, setIsSigned] = useState(false);
 
+  const [showForm, setShowForm] = useState(false);
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
+
+  // Load Draft ONCE on mount
+  useEffect(() => {
+    const loadDraft = async () => {
+      try {
+        const draftStr = await FileSystem.readAsStringAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt');
+        if (draftStr) {
+          const draft = JSON.parse(draftStr);
+          if (draft.step) setStep(draft.step);
+          if (draft.patientName) setPatientName(draft.patientName);
+          if (draft.patientAge) setPatientAge(draft.patientAge);
+          if (draft.patientGender) setPatientGender(draft.patientGender);
+          if (draft.patientContact) setPatientContact(draft.patientContact);
+          if (draft.patientCivilStatus) setPatientCivilStatus(draft.patientCivilStatus);
+          if (draft.patientAddress) setPatientAddress(draft.patientAddress);
+          if (draft.placeOfIncident) setPlaceOfIncident(draft.placeOfIncident);
+          if (draft.chiefComplaint) setChiefComplaint(draft.chiefComplaint);
+          if (draft.natureOfCall) setNatureOfCall(draft.natureOfCall);
+          
+          if (draft.dispatchTime) setDispatchTime(draft.dispatchTime);
+          if (draft.enRouteTime) setEnRouteTime(draft.enRouteTime);
+          if (draft.onSceneTime) setOnSceneTime(draft.onSceneTime);
+          if (draft.transportTime) setTransportTime(draft.transportTime);
+          if (draft.arrivedHF) setArrivedHF(draft.arrivedHF);
+          if (draft.departedHF) setDepartedHF(draft.departedHF);
+          
+          if (draft.selectedInjuries) setSelectedInjuries(draft.selectedInjuries);
+          if (draft.injuryDetails) setInjuryDetails(draft.injuryDetails);
+          if (draft.vitals) setVitals(draft.vitals);
+          
+          if (draft.gcsEye !== undefined) setGcsEye(draft.gcsEye);
+          if (draft.gcsVerbal !== undefined) setGcsVerbal(draft.gcsVerbal);
+          if (draft.gcsMotor !== undefined) setGcsMotor(draft.gcsMotor);
+          
+          if (draft.selectedDispositions) setSelectedDispositions(draft.selectedDispositions);
+          if (draft.specialInstructions) setSpecialInstructions(draft.specialInstructions);
+          if (draft.responders) setResponders(draft.responders);
+          if (draft.transportedTo) setTransportedTo(draft.transportedTo);
+          if (draft.receivedBy) setReceivedBy(draft.receivedBy);
+          if (draft.waiverName) setWaiverName(draft.waiverName);
+          if (draft.witnessName) setWitnessName(draft.witnessName);
+          if (draft.isSigned !== undefined) setIsSigned(draft.isSigned);
+
+          const hasActualData = Boolean(
+            draft.patientName || 
+            draft.chiefComplaint || 
+            draft.placeOfIncident || 
+            draft.injuryDetails || 
+            (draft.step && draft.step > 1)
+          );
+          if (hasActualData) {
+            setShowForm(true);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load draft:', e);
+      } finally {
+        setIsDraftLoaded(true);
+      }
+    };
+    loadDraft();
+  }, []);
+
+  // Auto-save draft
+  useEffect(() => {
+    if (!isDraftLoaded) return;
+
+    if (!showForm) {
+      FileSystem.deleteAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt', { idempotent: true }).catch(() => {});
+      return;
+    }
+    const draft = {
+      step, patientName, patientAge, patientGender, patientContact, patientCivilStatus, patientAddress, placeOfIncident,
+      chiefComplaint, natureOfCall, dispatchTime, enRouteTime, onSceneTime, transportTime, arrivedHF, departedHF,
+      selectedInjuries, injuryDetails, vitals, gcsEye, gcsVerbal, gcsMotor,
+      selectedDispositions, specialInstructions, responders, transportedTo, receivedBy,
+      waiverName, witnessName, isSigned
+    };
+    FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt', JSON.stringify(draft)).catch(() => {});
+  }, [
+    isDraftLoaded, showForm, step, patientName, patientAge, patientGender, patientContact, patientCivilStatus, patientAddress, placeOfIncident,
+    chiefComplaint, natureOfCall, dispatchTime, enRouteTime, onSceneTime, transportTime, arrivedHF, departedHF,
+    selectedInjuries, injuryDetails, vitals, gcsEye, gcsVerbal, gcsMotor,
+    selectedDispositions, specialInstructions, responders, transportedTo, receivedBy,
+    waiverName, witnessName, isSigned
+  ]);
+
+  const handleClearDraft = () => {
+    Alert.alert('Discard Draft', 'Are you sure you want to clear the entire form?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: async () => {
+          await FileSystem.deleteAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt', { idempotent: true });
+          setStep(1);
+          setShowForm(false);
+          setPatientName(''); setPatientAge(''); setPatientGender(''); setPatientContact('');
+          setPatientCivilStatus(''); setPatientAddress(''); setChiefComplaint(''); setNatureOfCall('');
+          setDispatchTime(''); setEnRouteTime(''); setOnSceneTime(''); setTransportTime('');
+          setArrivedHF(''); setDepartedHF(''); setSelectedInjuries([]); setInjuryDetails('');
+          setVitals([{ take: '1ST', time: '', o2: '', pr: '', rr: '', bp: '', temp: '' }, { take: '2ND', time: '', o2: '', pr: '', rr: '', bp: '', temp: '' }, { take: '3RD', time: '', o2: '', pr: '', rr: '', bp: '', temp: '' }]);
+          setGcsEye(0); setGcsVerbal(0); setGcsMotor(0);
+          setSelectedDispositions([]); setSpecialInstructions(''); setTransportedTo(''); setReceivedBy('');
+          setWaiverName(''); setWitnessName(''); setIsSigned(false);
+      }}
+    ]);
+  };
+
   // Initialize Responder Name
   useEffect(() => {
     fetchUserProfile().then(user => {
@@ -126,6 +237,40 @@ export default function PCRScreen() {
       setChiefComplaint(emergencyTypeParam);
     }
   }, [emergencyTypeParam]);
+
+  // Auto-start form if navigated from Tracking
+  useEffect(() => {
+    if (callerInfo || emergencyTypeParam || accidentAddress) {
+      setShowForm(true);
+    }
+  }, [callerInfo, emergencyTypeParam, accidentAddress]);
+
+  // Fetch Tracking Times from AsyncStorage every time this tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const fetchTrackingTimes = async () => {
+        try {
+          const getVal = async (key: string) => {
+            try { return await FileSystem.readAsStringAsync(FileSystem.documentDirectory + key + '.txt'); }
+            catch (e) { return null; }
+          };
+          const dTime = await getVal('dispatchTime');
+          const eTime = await getVal('enRouteTime');
+          const oTime = await getVal('onSceneTime');
+          if (isActive) {
+            setDispatchTime(prev => prev || dTime || '');
+            setEnRouteTime(prev => prev || eTime || '');
+            setOnSceneTime(prev => prev || oTime || '');
+          }
+        } catch (err) {
+          console.warn('Failed to load tracking times', err);
+        }
+      };
+      fetchTrackingTimes();
+      return () => { isActive = false; };
+    }, [])
+  );
 
   // Real-time Resident Search
   useEffect(() => {
@@ -151,6 +296,7 @@ export default function PCRScreen() {
     setPatientAddress(user.address || '');
     setPatientCivilStatus(user.civil_status || '');
     setPatientGender(user.gender || '');
+    setPatientAge(user.age ? user.age.toString() : '');
     // Auto-fill complaint based on emergency type
     setChiefComplaint(emergencyTypeParam);
   };
@@ -177,6 +323,17 @@ export default function PCRScreen() {
     setVitals(newVitals);
   };
 
+  const handleNextStep = () => {
+    if (step === 1) {
+      if (!patientName || !patientAge || !patientGender || !patientCivilStatus || !patientAddress || !placeOfIncident || !natureOfCall || !chiefComplaint || !patientContact) {
+        setShowErrors(true);
+        return;
+      }
+    }
+    setShowErrors(false);
+    setStep(step + 1);
+  };
+
   const handleSave = async () => {
     setIsSubmitting(true);
     try {
@@ -199,6 +356,7 @@ export default function PCRScreen() {
         }
       };
       await savePatientCareReport(payload);
+      await FileSystem.deleteAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt', { idempotent: true });
       Alert.alert('Success', 'Patient Care Report saved successfully.', [
         { text: 'OK', onPress: () => router.push('/(tabs)/manage') }
       ]);
@@ -219,7 +377,7 @@ export default function PCRScreen() {
             <Text style={styles.label}>Patient Name Search</Text>
             <View style={{ zIndex: 2 }}>
               <TextInput 
-                style={styles.input} 
+                style={[styles.input, showErrors && !patientName && styles.inputError]} 
                 placeholder="Search Resident or Type Name..." 
                 value={searchQuery || patientName} 
                 onChangeText={(text) => {
@@ -227,6 +385,7 @@ export default function PCRScreen() {
                   setPatientName(text);
                 }} 
               />
+              {showErrors && !patientName && <Text style={styles.errorText}>Patient Name is required</Text>}
               {isSearching && <ActivityIndicator style={{ position: 'absolute', right: 10, top: 15 }} />}
               {searchResults.length > 0 && (
                 <View style={styles.dropdownResults}>
@@ -243,73 +402,101 @@ export default function PCRScreen() {
             <View style={styles.row}>
               <View style={{flex: 1, marginRight: 5}}>
                 <Text style={styles.label}>Age</Text>
-                <TextInput style={styles.input} value={patientAge} onChangeText={setPatientAge} keyboardType="numeric" />
+                <TextInput style={[styles.input, showErrors && !patientAge && styles.inputError]} value={patientAge} onChangeText={setPatientAge} keyboardType="numeric" />
+                {showErrors && !patientAge && <Text style={styles.errorText}>Required</Text>}
               </View>
               <View style={{flex: 1, marginLeft: 5, zIndex: 1}}>
                 <Text style={styles.label}>Gender</Text>
-                <TouchableOpacity style={styles.multiSelectHeader} onPress={() => setShowGenderDropdown(!showGenderDropdown)}>
+                <TouchableOpacity style={[styles.multiSelectHeader, showErrors && !patientGender && styles.inputError]} onPress={() => setShowGenderDropdown(true)}>
                   <Text style={styles.multiSelectText}>{patientGender || 'Select...'}</Text>
                   <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
-                {showGenderDropdown && (
-                  <View style={[styles.dropdownBox, { position: 'absolute', top: 60, left: 0, right: 0, zIndex: 1000 }]}>
-                    {genderOptions.map(opt => (
-                      <TouchableOpacity key={opt} style={styles.dispOption} onPress={() => { setPatientGender(opt); setShowGenderDropdown(false); }}>
-                        <Ionicons name={patientGender === opt ? "radio-button-on" : "radio-button-off"} size={22} color={patientGender === opt ? "#0d6efd" : "#666"} />
-                        <Text style={styles.dispText}>{opt}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                {showErrors && !patientGender && <Text style={styles.errorText}>Required</Text>}
+                <Modal visible={showGenderDropdown} transparent={true} animationType="fade" onRequestClose={() => setShowGenderDropdown(false)}>
+                  <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowGenderDropdown(false)}>
+                    <View style={styles.modalContent}>
+                      <Text style={styles.modalTitle}>Select Gender</Text>
+                      {genderOptions.map(opt => (
+                        <TouchableOpacity key={opt} style={styles.dispOption} onPress={() => { setPatientGender(opt); setShowGenderDropdown(false); }}>
+                          <Ionicons name={patientGender === opt ? "radio-button-on" : "radio-button-off"} size={22} color={patientGender === opt ? "#0d6efd" : "#666"} />
+                          <Text style={styles.dispText}>{opt}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </TouchableOpacity>
+                </Modal>
               </View>
             </View>
 
             <Text style={styles.label}>Contact #</Text>
-            <TextInput style={styles.input} value={patientContact} onChangeText={setPatientContact} keyboardType="phone-pad" />
+            <TextInput style={[styles.input, showErrors && !patientContact && styles.inputError]} value={patientContact} onChangeText={setPatientContact} keyboardType="phone-pad" />
+            {showErrors && !patientContact && <Text style={styles.errorText}>Contact # is required</Text>}
             
             <Text style={styles.label}>Caller # (Auto-filled)</Text>
             <TextInput style={[styles.input, styles.readOnly]} value={callerNumber} editable={false} />
 
             <View style={{ zIndex: 0 }}>
               <Text style={styles.label}>Civil Status</Text>
-              <TouchableOpacity style={styles.multiSelectHeader} onPress={() => setShowCivilStatusDropdown(!showCivilStatusDropdown)}>
+              <TouchableOpacity style={[styles.multiSelectHeader, showErrors && !patientCivilStatus && styles.inputError]} onPress={() => setShowCivilStatusDropdown(true)}>
                 <Text style={styles.multiSelectText}>{patientCivilStatus || 'Select...'}</Text>
                 <Ionicons name="chevron-down" size={20} color="#666" />
               </TouchableOpacity>
-              {showCivilStatusDropdown && (
-                <View style={styles.dropdownBox}>
-                  {civilStatusOptions.map(opt => (
-                    <TouchableOpacity key={opt} style={styles.dispOption} onPress={() => { setPatientCivilStatus(opt); setShowCivilStatusDropdown(false); }}>
-                      <Ionicons name={patientCivilStatus === opt ? "radio-button-on" : "radio-button-off"} size={22} color={patientCivilStatus === opt ? "#0d6efd" : "#666"} />
-                      <Text style={styles.dispText}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+              {showErrors && !patientCivilStatus && <Text style={styles.errorText}>Civil Status is required</Text>}
+              <Modal visible={showCivilStatusDropdown} transparent={true} animationType="fade" onRequestClose={() => setShowCivilStatusDropdown(false)}>
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCivilStatusDropdown(false)}>
+                  <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Select Civil Status</Text>
+                    <ScrollView>
+                      {civilStatusOptions.map(opt => (
+                        <TouchableOpacity key={opt} style={styles.dispOption} onPress={() => { setPatientCivilStatus(opt); setShowCivilStatusDropdown(false); }}>
+                          <Ionicons name={patientCivilStatus === opt ? "radio-button-on" : "radio-button-off"} size={22} color={patientCivilStatus === opt ? "#0d6efd" : "#666"} />
+                          <Text style={styles.dispText}>{opt}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
             </View>
 
             <Text style={styles.label}>Address</Text>
-            <TextInput style={styles.input} value={patientAddress} onChangeText={setPatientAddress} />
-
-            <Text style={styles.label}>Chief Complaint</Text>
-            <TextInput style={styles.input} value={chiefComplaint} onChangeText={setChiefComplaint} />
+            <TextInput style={[styles.input, showErrors && !patientAddress && styles.inputError]} value={patientAddress} onChangeText={setPatientAddress} />
+            {showErrors && !patientAddress && <Text style={styles.errorText}>Address is required</Text>}
 
             <View style={{ zIndex: 0 }}>
+              <Text style={styles.label}>Place of Incident</Text>
+              <TextInput style={[styles.input, showErrors && !placeOfIncident && styles.inputError]} value={placeOfIncident} onChangeText={setPlaceOfIncident} />
+              {showErrors && !placeOfIncident && <Text style={styles.errorText}>Place of Incident is required</Text>}
+            </View>
+
+            <View style={{ zIndex: 1 }}>
               <Text style={styles.label}>Nature of Call</Text>
-              <TouchableOpacity style={styles.multiSelectHeader} onPress={() => setShowNatureOfCallDropdown(!showNatureOfCallDropdown)}>
+              <TouchableOpacity style={[styles.multiSelectHeader, showErrors && !natureOfCall && styles.inputError]} onPress={() => setShowNatureOfCallDropdown(true)}>
                 <Text style={styles.multiSelectText}>{natureOfCall || 'Select...'}</Text>
                 <Ionicons name="chevron-down" size={20} color="#666" />
               </TouchableOpacity>
-              {showNatureOfCallDropdown && (
-                <View style={styles.dropdownBox}>
-                  {natureOfCallOptions.map(opt => (
-                    <TouchableOpacity key={opt} style={styles.dispOption} onPress={() => { setNatureOfCall(opt); setShowNatureOfCallDropdown(false); }}>
-                      <Ionicons name={natureOfCall === opt ? "radio-button-on" : "radio-button-off"} size={22} color={natureOfCall === opt ? "#0d6efd" : "#666"} />
-                      <Text style={styles.dispText}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+              {showErrors && !natureOfCall && <Text style={styles.errorText}>Nature of Call is required</Text>}
+              <Modal visible={showNatureOfCallDropdown} transparent={true} animationType="fade" onRequestClose={() => setShowNatureOfCallDropdown(false)}>
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowNatureOfCallDropdown(false)}>
+                  <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Select Nature of Call</Text>
+                    <ScrollView>
+                      {natureOfCallOptions.map(opt => (
+                        <TouchableOpacity key={opt} style={styles.dispOption} onPress={() => { setNatureOfCall(opt); setShowNatureOfCallDropdown(false); }}>
+                          <Ionicons name={natureOfCall === opt ? "radio-button-on" : "radio-button-off"} size={22} color={natureOfCall === opt ? "#0d6efd" : "#666"} />
+                          <Text style={styles.dispText}>{opt}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
+            </View>
+
+            <View style={{ zIndex: 0 }}>
+              <Text style={styles.label}>Chief Complaint</Text>
+              <TextInput style={[styles.input, showErrors && !chiefComplaint && styles.inputError]} value={chiefComplaint} onChangeText={setChiefComplaint} />
+              {showErrors && !chiefComplaint && <Text style={styles.errorText}>Chief Complaint is required</Text>}
             </View>
           </ScrollView>
         );
@@ -502,11 +689,46 @@ export default function PCRScreen() {
     }
   };
 
+  if (!showForm) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.backgroundGlowTop} pointerEvents="none" />
+        <View style={styles.backgroundGlowBottom} pointerEvents="none" />
+        
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerSubtitle}>MDRRMO MANAGEMENT SYSTEM</Text>
+            <Text style={styles.headerTitle}>PATIENT CARE RECORD</Text>
+          </View>
+        </View>
+
+        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30}}>
+          <View style={{ backgroundColor: 'rgba(10, 132, 255, 0.1)', padding: 24, borderRadius: 50, marginBottom: 20 }}>
+            <Ionicons name="document-text" size={64} color="#0a84ff" />
+          </View>
+          <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 10 }}>No Active Report</Text>
+          <Text style={{ color: '#8e8e93', fontSize: 14, textAlign: 'center', marginBottom: 40, lineHeight: 22 }}>
+            There is currently no emergency dispatch or Patient Care Report being drafted.
+          </Text>
+          
+          <TouchableOpacity 
+            style={{ backgroundColor: '#0a84ff', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16 }} 
+            onPress={() => setShowForm(true)}
+          >
+            <Ionicons name="add-circle" size={20} color="#fff" style={{marginRight: 8}} />
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Create New PCR</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.backgroundGlowTop} />
-      <View style={styles.backgroundGlowBottom} />
+      <View style={styles.backgroundGlowTop} pointerEvents="none" />
+      <View style={styles.backgroundGlowBottom} pointerEvents="none" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -514,6 +736,9 @@ export default function PCRScreen() {
           <Text style={styles.headerSubtitle}>STEP {step} OF {totalSteps}</Text>
           <Text style={styles.headerTitle}>PATIENT CARE RECORD</Text>
         </View>
+        <TouchableOpacity onPress={handleClearDraft} style={{ padding: 8 }}>
+          <Ionicons name="trash-outline" size={24} color="#ef4544" />
+        </TouchableOpacity>
       </View>
 
       {/* Progress Bar */}
@@ -527,20 +752,18 @@ export default function PCRScreen() {
       </View>
 
       {/* Footer Navigation */}
-      <View style={styles.footer}>
+      <View style={styles.footer} pointerEvents="box-none">
         <TouchableOpacity 
           style={[styles.navBtn, step === 1 && styles.navBtnDisabled]} 
           disabled={step === 1}
           onPress={() => setStep(step - 1)}
         >
-          <Ionicons name="arrow-back" size={20} color={step === 1 ? "#3a3a44" : "#fff"} />
-          <Text style={[styles.navBtnText, step === 1 && {color: '#3a3a44'}]}>Back</Text>
+          <Ionicons name="arrow-back" size={18} color={step === 1 ? "#3a3a44" : "#fff"} />
         </TouchableOpacity>
 
         {step < totalSteps ? (
-          <TouchableOpacity style={styles.navBtnPrimary} onPress={() => setStep(step + 1)}>
-            <Text style={styles.navBtnText}>Next</Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" />
+          <TouchableOpacity style={styles.navBtnPrimary} onPress={handleNextStep}>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.submitBtn} onPress={handleSave} disabled={isSubmitting}>
@@ -615,6 +838,7 @@ const styles = StyleSheet.create({
   },
   stepContainer: {
     padding: 24,
+    paddingBottom: 200, // extra padding so content scrolls above floating footer
   },
   stepTitle: {
     fontSize: 18,
@@ -650,34 +874,38 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     padding: 24,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    backgroundColor: '#050507',
-    borderTopWidth: 1,
-    borderTopColor: '#1f1f26',
+    backgroundColor: 'transparent',
     justifyContent: 'space-between',
+    zIndex: 100,
   },
   navBtn: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#111115',
     borderWidth: 1,
     borderColor: '#1f1f26',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 12,
   },
   navBtnDisabled: {
     backgroundColor: '#0a0a0c',
     borderColor: '#111115',
+    opacity: 0.5,
   },
   navBtnPrimary: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#0a84ff',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 12,
     shadowColor: '#0a84ff',
     shadowOffset: { width: 0, height: 4 },
@@ -867,14 +1095,46 @@ const styles = StyleSheet.create({
     color: '#fff',
     flex: 1,
   },
-  dropdownBox: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
     backgroundColor: '#111115',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1f1f26',
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    maxHeight: 250,
+    maxHeight: '80%',
+    paddingVertical: 10,
+  },
+  modalTitle: {
+    color: '#8e8e93',
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f1f26',
+    marginBottom: 8,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    borderWidth: 1,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 6,
+    marginBottom: -2,
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  readOnly: {
+    backgroundColor: '#1f1f26',
+    color: '#8e8e93',
   },
   dispOption: {
     flexDirection: 'row',

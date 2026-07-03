@@ -77,12 +77,26 @@ export default function IncomingCallScreen() {
   const [showBrgyModal, setShowBrgyModal] = useState(false);
   const [showPurokModal, setShowPurokModal] = useState(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
-  const [showCustomEmergencyModal, setShowCustomEmergencyModal] = useState(false);
-  const [customEmergencyText, setCustomEmergencyText] = useState('');
+  const [showLandmarkModal, setShowLandmarkModal] = useState(false);
+  const [formErrors, setFormErrors] = useState<{barangay?: boolean, purok?: boolean, incidentDetails?: boolean}>({});
 
   // Find available puroks for the selected barangay
   const availablePuroks = ALL_LOCATIONS
     .filter(loc => (loc.type === 'zone' || loc.type === 'purok' || loc.type === 'sitio') && loc.barangay === barangay)
+    .map(loc => loc.name);
+
+  // Find available landmarks for the selected barangay and purok
+  const availableLandmarks = ALL_LOCATIONS
+    .filter(loc => {
+      const isLandmark = ['landmark', 'school', 'church', 'hospital', 'public_building', 'establishment'].includes(loc.type);
+      if (!isLandmark || loc.barangay !== barangay) return false;
+      
+      // If a purok/zone is selected, strictly filter landmarks by that purok/zone
+      if (purok) {
+        if (loc.zone !== purok) return false;
+      }
+      return true;
+    })
     .map(loc => loc.name);
 
   // Pulse animation for the avatar ring (Incoming Call State)
@@ -257,6 +271,18 @@ export default function IncomingCallScreen() {
   }
 
   async function handleDispatch() {
+    const errors = {
+      barangay: !barangay,
+      purok: !purok,
+      incidentDetails: !incidentDetails
+    };
+
+    if (errors.barangay || errors.purok || errors.incidentDetails) {
+      setFormErrors(errors);
+      return;
+    }
+
+    setFormErrors({});
     setIsNavigatingAway(true);
     // Prepare params to pass to the tracking screen
     const passName = isRegistered && callerDetails?.full_name ? callerDetails.full_name : manualName;
@@ -491,62 +517,63 @@ export default function IncomingCallScreen() {
             onChangeText={setManualName}
           />
 
-              <Text style={styles.label}>Barangay</Text>
+              <Text style={styles.label}>Barangay <Text style={styles.requiredAsterisk}>*</Text></Text>
               <TouchableOpacity 
-                style={[styles.input, { justifyContent: 'center' }]} 
-                onPress={() => setShowBrgyModal(true)}
+                style={[styles.input, { justifyContent: 'center' }, formErrors.barangay && styles.inputError]} 
+                onPress={() => { setShowBrgyModal(true); setFormErrors(prev => ({...prev, barangay: false})); }}
               >
                 <Text style={{ color: barangay ? '#fff' : '#666', fontSize: 15 }}>{barangay || 'Select Barangay'}</Text>
               </TouchableOpacity>
+              {formErrors.barangay && <Text style={styles.errorText}>Barangay is required.</Text>}
 
-              <Text style={styles.label}>Zone</Text>
+              <Text style={styles.label}>Zone <Text style={styles.requiredAsterisk}>*</Text></Text>
               {availablePuroks.length > 0 ? (
                 <TouchableOpacity 
-                  style={[styles.input, { justifyContent: 'center' }]} 
-                  onPress={() => setShowPurokModal(true)}
+                  style={[styles.input, { justifyContent: 'center' }, formErrors.purok && styles.inputError]} 
+                  onPress={() => { setShowPurokModal(true); setFormErrors(prev => ({...prev, purok: false})); }}
                 >
                   <Text style={{ color: purok ? '#fff' : '#666', fontSize: 15 }}>{purok || 'Select Zone'}</Text>
                 </TouchableOpacity>
               ) : (
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, formErrors.purok && styles.inputError]}
                   placeholder="Enter Zone"
                   placeholderTextColor="#666"
                   value={purok}
-                  onChangeText={setPurok}
+                  onChangeText={(val) => { setPurok(val); setFormErrors(prev => ({...prev, purok: false})); }}
                 />
               )}
+              {formErrors.purok && <Text style={styles.errorText}>Zone is required.</Text>}
 
               <Text style={styles.label}>Landmark</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Landmark"
-                placeholderTextColor="#666"
-                value={landmark}
-                onChangeText={setLandmark}
-              />
-          <Text style={styles.label}>Nature of Emergency</Text>
-          <View style={[styles.input, { paddingVertical: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' }]}>
+              {availableLandmarks.length > 0 ? (
+                <View style={[styles.input, { paddingVertical: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' }]}>
+                  <TouchableOpacity 
+                    style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, justifyContent: 'center' }} 
+                    onPress={() => setShowLandmarkModal(true)}
+                  >
+                    <Text style={{ color: landmark ? '#fff' : '#666', fontSize: 15 }}>{landmark || 'Select Landmark'}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Landmark"
+                  placeholderTextColor="#666"
+                  value={landmark}
+                  onChangeText={setLandmark}
+                />
+              )}
+          <Text style={styles.label}>Nature of Emergency <Text style={styles.requiredAsterisk}>*</Text></Text>
+          <View style={[styles.input, { paddingVertical: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' }, formErrors.incidentDetails && styles.inputError]}>
             <TouchableOpacity 
               style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, justifyContent: 'center' }} 
-              onPress={() => setShowEmergencyModal(true)}
+              onPress={() => { setShowEmergencyModal(true); setFormErrors(prev => ({...prev, incidentDetails: false})); }}
             >
               <Text style={{ color: incidentDetails ? '#fff' : '#666', fontSize: 15 }}>{incidentDetails || 'Select Emergency Type'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={{
-                width: 32,
-                height: 32,
-                backgroundColor: '#2b2b36',
-                borderRadius: 8,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-              onPress={() => setShowCustomEmergencyModal(true)}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-            </TouchableOpacity>
           </View>
+          {formErrors.incidentDetails && <Text style={styles.errorText}>Nature of Emergency is required.</Text>}
         </View>
 
       </ScrollView>
@@ -581,6 +608,7 @@ export default function IncomingCallScreen() {
         data={availablePuroks} 
         onSelect={setPurok} 
         title={`Select Zone in ${barangay}`} 
+        allowCustomAdd={true}
       />
       <SearchableSelectModal 
         visible={showEmergencyModal} 
@@ -588,54 +616,27 @@ export default function IncomingCallScreen() {
         data={EMERGENCY_TYPES} 
         onSelect={setIncidentDetails} 
         title="Select Nature of Emergency" 
+        allowCustomAdd={true}
       />
-      <Modal visible={showCustomEmergencyModal} animationType="fade" transparent onRequestClose={() => setShowCustomEmergencyModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ backgroundColor: '#1c1c23', padding: 20, borderRadius: 16, width: '100%', borderWidth: 1, borderColor: '#2b2b35' }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>Custom Emergency</Text>
-            <TextInput
-              style={[styles.input, { marginBottom: 20, backgroundColor: '#111115' }]}
-              placeholder="Enter Nature of Emergency"
-              placeholderTextColor="#666"
-              value={customEmergencyText}
-              onChangeText={setCustomEmergencyText}
-              autoFocus
-            />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity 
-                style={{ flex: 1, padding: 15, borderRadius: 12, backgroundColor: '#2b2b35', alignItems: 'center' }}
-                onPress={() => setShowCustomEmergencyModal(false)}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={{ flex: 1, padding: 15, borderRadius: 12, backgroundColor: '#0a84ff', alignItems: 'center' }}
-                onPress={() => {
-                  if (customEmergencyText.trim()) {
-                    setIncidentDetails(customEmergencyText.trim());
-                  }
-                  setShowCustomEmergencyModal(false);
-                  setCustomEmergencyText('');
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
+      <SearchableSelectModal 
+        visible={showLandmarkModal} 
+        onClose={() => setShowLandmarkModal(false)} 
+        data={availableLandmarks} 
+        onSelect={setLandmark} 
+        title={`Select Landmark in ${barangay}`} 
+        allowCustomAdd={true}
+      />
     </KeyboardAvoidingView>
   );
 }
 
-const SearchableSelectModal = ({ visible, onClose, data, onSelect, title }: { visible: boolean, onClose: () => void, data: string[], onSelect: (val: string) => void, title: string }) => {
+const SearchableSelectModal = ({ visible, onClose, data, onSelect, title, allowCustomAdd }: { visible: boolean, onClose: () => void, data: string[], onSelect: (val: string) => void, title: string, allowCustomAdd?: boolean }) => {
   const [search, setSearch] = useState('');
   const filtered = data.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
         <View style={{ backgroundColor: '#111115', height: '60%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{title}</Text>
@@ -650,7 +651,16 @@ const SearchableSelectModal = ({ visible, onClose, data, onSelect, title }: { vi
             value={search}
             onChangeText={setSearch}
           />
-          <ScrollView>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {allowCustomAdd && search.trim().length > 0 && !data.some(d => d.toLowerCase() === search.trim().toLowerCase()) && (
+              <TouchableOpacity 
+                style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f1f26', flexDirection: 'row', alignItems: 'center' }} 
+                onPress={() => { onSelect(search.trim()); setSearch(''); onClose(); }}
+              >
+                <Ionicons name="add" size={20} color="#0a84ff" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#0a84ff', fontSize: 16, fontWeight: '600' }}>Add "{search.trim()}"</Text>
+              </TouchableOpacity>
+            )}
             {filtered.map(item => (
               <TouchableOpacity 
                 key={item} 
@@ -662,7 +672,7 @@ const SearchableSelectModal = ({ visible, onClose, data, onSelect, title }: { vi
             ))}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -888,4 +898,7 @@ const styles = StyleSheet.create({
   brgyPillActive: { backgroundColor: 'rgba(10, 132, 255, 0.2)', borderColor: '#0a84ff' },
   brgyPillText: { color: '#8e8e93', fontSize: 14, fontWeight: '600' },
   brgyPillTextActive: { color: '#0a84ff' },
+  inputError: { borderColor: '#ef4444', borderWidth: 1, backgroundColor: 'rgba(239, 68, 68, 0.05)' },
+  errorText: { color: '#ef4444', fontSize: 13, marginTop: -8, marginBottom: 12, marginLeft: 4, fontWeight: '500' },
+  requiredAsterisk: { color: '#ef4444' },
 });
