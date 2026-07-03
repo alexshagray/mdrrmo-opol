@@ -1,0 +1,7 @@
+expo.modules.calldetector.expo-call-detector-pngs-0 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\build\generated\res\pngs\release
+expo.modules.calldetector.expo-call-detector-resValues-1 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\build\generated\res\resValues\release
+expo.modules.calldetector.expo-call-detector-mergeReleaseResources-2 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\build\intermediates\incremental\release\mergeReleaseResources\merged.dir
+expo.modules.calldetector.expo-call-detector-mergeReleaseResources-3 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\build\intermediates\incremental\release\mergeReleaseResources\stripped.dir
+expo.modules.calldetector.expo-call-detector-release-4 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\build\intermediates\merged_res\release\mergeReleaseResources
+expo.modules.calldetector.expo-call-detector-main-5 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\res
+expo.modules.calldetector.expo-call-detector-release-6 C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\release\res

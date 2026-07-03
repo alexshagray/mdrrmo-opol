@@ -1,0 +1,36 @@
+{
+  "$schema": "https://www.schemastore.org/package.json",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "~19.2.14",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.0.1",
+    "laravel-vite-plugin": "^3.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.0"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.1",
+    "cors": "^2.8.6",
+    "expo": "^56.0.11",
+    "express": "^5.2.1",
+    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.25.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-leaflet": "^5.0.0",
+    "react-map-gl": "^8.1.1",
+    "react-native": "0.85.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  },
+  "name": "MDRRMO_Management_system",
+  "version": "1.0.0"
+}

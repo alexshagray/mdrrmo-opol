@@ -1,0 +1,39 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="expo.modules.calldetector" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <application>
+7-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:2:5-12:19
+8        <service
+8-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:3:9-11:19
+9            android:name="expo.modules.calldetector.CustomInCallService"
+9-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:3:18-78
+10            android:exported="true"
+10-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:5:18-41
+11            android:permission="android.permission.BIND_INCALL_SERVICE" >
+11-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:4:18-77
+12            <meta-data
+12-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:6:13-97
+13                android:name="android.telecom.IN_CALL_SERVICE_UI"
+13-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:6:24-73
+14                android:value="true" />
+14-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:6:74-94
+15            <meta-data
+15-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:7:13-102
+16                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+16-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:7:24-78
+17                android:value="true" />
+17-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:7:79-99
+18
+19            <intent-filter>
+19-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:8:13-10:29
+20                <action android:name="android.telecom.InCallService" />
+20-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:9:17-71
+20-->C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:9:25-69
+21            </intent-filter>
+22        </service>
+23    </application>
+24
+25</manifest>

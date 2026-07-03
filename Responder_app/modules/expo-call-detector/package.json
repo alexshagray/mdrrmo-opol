@@ -1,0 +1,7 @@
+{
+  "name": "expo-call-detector",
+  "version": "0.1.0",
+  "description": "A local Expo module to detect incoming calls.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

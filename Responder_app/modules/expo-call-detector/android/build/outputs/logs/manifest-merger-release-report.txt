@@ -1,0 +1,44 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:1:1-13:12
+INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:1:1-13:12
+	package
+		INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:1:11-69
+application
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:2:5-12:19
+service#expo.modules.calldetector.CustomInCallService
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:3:9-11:19
+	android:exported
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:5:18-41
+	android:permission
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:4:18-77
+	android:name
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:3:18-78
+meta-data#android.telecom.IN_CALL_SERVICE_UI
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:6:13-97
+	android:value
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:6:74-94
+	android:name
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:6:24-73
+meta-data#android.telecom.IN_CALL_SERVICE_RINGING
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:7:13-102
+	android:value
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:7:79-99
+	android:name
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:7:24-78
+intent-filter#action:name:android.telecom.InCallService
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:8:13-10:29
+action#android.telecom.InCallService
+ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:9:17-71
+	android:name
+		ADDED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml:9:25-69
+uses-sdk
+INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml
+INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android\src\main\AndroidManifest.xml

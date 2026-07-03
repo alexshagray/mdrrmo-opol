@@ -1,0 +1,31 @@
+# Laravel
+/vendor/
+.env
+
+# Node / React Native / Expo
+node_modules/
+.expo/
+android/build/
+android/.gradle/
+ios/build/
+modules/**/build/
+
+# Builds
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# SQLite
+*.sqlite
+*.sqlite3
+
+# Extra safety (VERY IMPORTANT for your project)
+Responder_app/**/android/build/
+Responder_app/**/modules/**/build/
+
+# APK / Android builds
+*.apk
+public/*.apk
