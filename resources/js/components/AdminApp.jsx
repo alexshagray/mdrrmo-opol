@@ -4,12 +4,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import AdminNavbar from './Admin/AdminNavbar';
 import UserManagement from './Admin/UserManagement';
 import RespondersManager from './Staff1/RespondersManager';
+import EventsManager from './Staff1/EventsManager';
+import AdminDashboard from './Admin/AdminDashboard';
 
 export default function AdminApp() {
     const [token, setToken] = useState(localStorage.getItem('admin_token') || null);
     const [adminUser, setAdminUser] = useState(null);
     const queryClient = useQueryClient();
-    const [activeSection, setActiveSection] = useState('users');
+    const [activeSection, setActiveSection] = useState('dashboard');
 
     // Global Notifications
     const [notifications, setNotifications] = useState([]);
@@ -264,8 +266,18 @@ export default function AdminApp() {
             />
 
             {/* Admin Tabs */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 mb-4 relative z-10">
-                <div className="flex space-x-2 p-1 bg-[#111116] border border-[#1f1f26] rounded-xl w-fit">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 mb-4 relative z-10 overflow-x-auto custom-scrollbar pb-2">
+                <div className="flex space-x-2 p-1 bg-[#111116] border border-[#1f1f26] rounded-xl w-fit min-w-max">
+                    <button
+                        onClick={() => setActiveSection('dashboard')}
+                        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                            activeSection === 'dashboard' 
+                                ? 'bg-gradient-to-r from-[#0a84ff] to-[#005bb5] text-white shadow-lg shadow-[#0a84ff]/20' 
+                                : 'text-gray-400 hover:text-white hover:bg-[#181822]'
+                        }`}
+                    >
+                        Overview Dashboard
+                    </button>
                     <button
                         onClick={() => setActiveSection('users')}
                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
@@ -286,15 +298,33 @@ export default function AdminApp() {
                     >
                         Personnel Availability
                     </button>
+                    <button
+                        onClick={() => setActiveSection('events')}
+                        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                            activeSection === 'events' 
+                                ? 'bg-gradient-to-r from-[#0a84ff] to-[#005bb5] text-white shadow-lg shadow-[#0a84ff]/20' 
+                                : 'text-gray-400 hover:text-white hover:bg-[#181822]'
+                        }`}
+                    >
+                        Events
+                    </button>
                 </div>
             </div>
 
             <div className="relative z-10">
+                {activeSection === 'dashboard' && <AdminDashboard setActiveSection={setActiveSection} />}
                 {activeSection === 'users' && <UserManagement token={token} handleLogout={handleLogout} />}
                 {activeSection === 'personnel' && (
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="bg-[#111115] border border-[#1f1f26] rounded-2xl overflow-hidden p-6 mt-2 shadow-2xl">
                             <RespondersManager />
+                        </div>
+                    </div>
+                )}
+                {activeSection === 'events' && (
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="mt-2">
+                            <EventsManager role="Admin" />
                         </div>
                     </div>
                 )}

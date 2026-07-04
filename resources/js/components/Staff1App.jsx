@@ -5,11 +5,12 @@ import Staff1Header from './Staff1/Staff1Header';
 import InventoryManager from './Staff1/InventoryManager';
 import TrainedPersonnelManager from './Staff1/TrainedPersonnelManager';
 import EventsManager from './Staff1/EventsManager';
-import Pcr from './Staff2/Pcr';
+import Pcr from './Staff1/Pcr';
+import Staff1Dashboard from './Staff1/Staff1Dashboard';
 
 const Staff1App = () => {
   const [activeSection, setActiveSection] = useState(() => {
-    return localStorage.getItem('staff1ActiveSection') || 'inventory';
+    return localStorage.getItem('staff1ActiveSection') || 'dashboard';
   });
 
   React.useEffect(() => {
@@ -44,8 +45,17 @@ const Staff1App = () => {
 
         <div className="p-8 overflow-y-auto flex-1">
           {(activeSection === 'inventory' || activeSection === 'equipment' || activeSection === 'alerts' || activeSection === 'reports') && <InventoryManager activeSection={activeSection} />}
-          {activeSection === 'pcr' && <Pcr setNotifications={() => {}} />}
-          {activeSection === 'events' && <EventsManager />}
+          {activeSection === 'events' && (
+            <EventsManager role="Staff1" />
+          )}
+
+          {activeSection === 'pcr' && (
+            <Pcr />
+          )}
+
+          {activeSection === 'dashboard' && (
+            <Staff1Dashboard setActiveSection={setActiveSection} />
+          )}
           {activeSection === 'trained_personnel' && <TrainedPersonnelManager />}
         </div>
       </div>

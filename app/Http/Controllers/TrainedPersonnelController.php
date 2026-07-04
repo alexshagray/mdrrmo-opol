@@ -7,9 +7,16 @@ use Illuminate\Http\Request;
 
 class TrainedPersonnelController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(TrainedPersonnel::paginate(10));
+        $query = TrainedPersonnel::query();
+        if ($request->has('barangay') && $request->barangay !== 'All') {
+            $query->where('barangay', $request->barangay);
+        }
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where('name', 'LIKE', '%' . $request->search . '%');
+        }
+        return response()->json($query->paginate(10));
     }
 
     public function store(Request $request)

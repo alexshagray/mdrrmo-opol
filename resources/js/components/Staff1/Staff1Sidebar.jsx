@@ -21,6 +21,16 @@ export default function Staff1Sidebar({ activeSection, setActiveSection, lowStoc
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         <nav className="flex flex-col gap-2">
+          <button
+            onClick={() => setActiveSection('dashboard')}
+            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${activeSection === 'dashboard' ? 'bg-gradient-to-r from-[rgba(10,132,255,0.15)] to-[rgba(10,132,255,0.05)] text-[#0a84ff] border border-[#0a84ff]/30 shadow-[inset_4px_0_0_#0a84ff]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-lg">🏠</span>
+              Overview
+            </span>
+          </button>
+
           <div className="flex flex-col gap-1">
             <button
               onClick={() => setActiveSection('inventory')}

@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+
+const OPOL_BARANGAYS = [
+  "AWANG", "BAGOCBOC", "BARRA", "BONBON", "CAUYONAN", "IGPIT", "LIMONDA", 
+  "LUYONG BONBON", "MALANANG", "NANGCAON", "PATAG", "POBLACION", 
+  "TABOC", "TINGALAN"
+];
 
 export default function TrainedPersonnelManager() {
   const [tpPage, setTpPage] = useState(1);
@@ -7,14 +13,29 @@ export default function TrainedPersonnelManager() {
   const [personnelFormData, setPersonnelFormData] = useState({ id: null, name: '', age: '', sex: 'MALE', zone: '', barangay: '' });
   const [selectedBarangay, setSelectedBarangay] = useState('All');
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setTpPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   const queryClient = useQueryClient();
 
   const { data: tpData, isLoading } = useQuery({
-    queryKey: ['trainedPersonnel', tpPage],
+    queryKey: ['trainedPersonnel', tpPage, selectedBarangay, debouncedSearchQuery],
     queryFn: async () => {
-      const res = await fetch(`/api/trained_personnels?page=${tpPage}`);
+      let url = `/api/trained_personnels?page=${tpPage}`;
+      if (selectedBarangay !== 'All') url += `&barangay=${encodeURIComponent(selectedBarangay)}`;
+      if (debouncedSearchQuery) url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
+      const res = await fetch(url);
       return res.json();
-    }
+    },
+    placeholderData: keepPreviousData
   });
 
   const trainedPersonnel = tpData?.data || [];
@@ -68,20 +89,20 @@ export default function TrainedPersonnelManager() {
     return <div className="p-8 text-center text-gray-400">Loading personnel data...</div>;
   }
 
-  const uniqueBarangays = [...new Set(trainedPersonnel.map(p => p.barangay))].filter(Boolean).sort((a, b) => a.localeCompare(b));
-  
-  const filteredPersonnel = (selectedBarangay === 'All' 
-    ? [...trainedPersonnel] 
-    : trainedPersonnel.filter(p => p.barangay === selectedBarangay)
-  ).sort((a, b) => a.name.localeCompare(b.name));
-
   return (
     <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-6 shadow-xl">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-xl font-bold text-white m-0">Barangay Emergency Response Training 2025</h3>
         <div className="flex items-center gap-3">
+          <input 
+            type="text" 
+            placeholder="Search name..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-[#0c0c10] border border-[#2b2b35] px-3 py-1.5 rounded-lg text-sm text-white focus:outline-none focus:border-[#0a84ff]"
+          />
           <span className="bg-[rgba(10,132,255,0.15)] text-[#0a84ff] border border-[rgba(10,132,255,0.3)] px-3 py-1.5 rounded-lg text-sm font-bold">
-            {filteredPersonnel.length} Personnel Trained
+            {tpData?.total || 0} Personnel Trained
           </span>
           <button 
             className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-4 py-2 rounded-lg font-semibold transition-all text-sm" 
@@ -139,27 +160,24 @@ export default function TrainedPersonnelManager() {
               <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Sex</th>
               <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Zone</th>
               <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">
-                <div className="flex items-center gap-2">
-                  Barangay
-                  <select 
-                    value={selectedBarangay} 
-                    onChange={e => setSelectedBarangay(e.target.value)}
-                    className="p-1 bg-[#0c0c10] border border-[#2b2b35] rounded text-white outline-none text-xs font-normal"
-                  >
-                    <option value="All">All</option>
-                    {uniqueBarangays.map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
+                <select 
+                  value={selectedBarangay} 
+                  onChange={e => { setSelectedBarangay(e.target.value); setTpPage(1); }}
+                  className="bg-transparent text-[#0a84ff] font-bold outline-none cursor-pointer border-none p-0 focus:ring-0 text-sm"
+                >
+                  <option value="All" className="bg-[#181822] text-white">All Barangays</option>
+                  {OPOL_BARANGAYS.map(b => (
+                    <option key={b} value={b} className="bg-[#181822] text-white">{b}</option>
+                  ))}
+                </select>
               </th>
               <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35] rounded-tr-lg">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredPersonnel.length === 0 ? (
+            {trainedPersonnel.length === 0 ? (
               <tr><td colSpan="7" className="p-4 text-center text-gray-400 border-b border-[#1f1f26]">No trained personnel found for this barangay.</td></tr>
-            ) : filteredPersonnel.map((person) => (
+            ) : trainedPersonnel.map((person) => (
               <tr key={person.id} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors">
                 <td className="p-4 border-b border-[#1f1f26] text-gray-300 text-sm">{person.id}</td>
                 <td className="p-4 border-b border-[#1f1f26] text-white font-medium text-sm">{person.name}</td>

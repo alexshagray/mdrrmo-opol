@@ -7,10 +7,12 @@ import Staff2Header from './Staff2/Staff2Header';
 import Incidents from './Staff2/Incidents';
 import LiveMonitoring from './Staff2/LiveMonitoring';
 import Staff2Dashboard from './Staff2/Staff2Dashboard';
+import EventsManager from './Staff1/EventsManager';
+import Staff2Overview from './Staff2/Staff2Overview';
 
 export default function Staff2App() {
   const [activeSection, setActiveSection] = useState(() => {
-    return localStorage.getItem('staff2ActiveSection') || 'incidents';
+    return localStorage.getItem('staff2ActiveSection') || 'dashboard';
   });
 
   useEffect(() => {
@@ -66,10 +68,17 @@ export default function Staff2App() {
           activeSection={activeSection}
         />
         
+        {activeSection === 'dashboard' && <Staff2Overview setActiveSection={setActiveSection} responders={responders} />}
         {activeSection === 'incidents' && <Incidents setNotifications={setNotifications} />}
 
         {activeSection === 'live_monitoring' && (
           <Staff2Dashboard responders={responders} setNotifications={setNotifications} />
+        )}
+
+        {activeSection === 'events' && (
+          <div className="p-8 h-full overflow-y-auto">
+            <EventsManager role="Staff2" />
+          </div>
         )}
       </div>
 

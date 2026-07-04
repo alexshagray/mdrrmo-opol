@@ -49,7 +49,18 @@ export default function Staff1Header({ activeSection }) {
     setCurrentNotification(null);
   };
 
+  const markAsRead = (id) => {
+    const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
+    if (!readIds.includes(id)) {
+      readIds.push(id);
+      localStorage.setItem('readNotifications', JSON.stringify(readIds));
+      // Force a re-render by creating a new array reference
+      setNotifications([...notifications]);
+    }
+  };
+
   const sectionTitles = {
+    'dashboard': 'Overview Dashboard',
     'inventory': 'Assets & Supplies Management',
     'alerts': 'Inventory Alerts',
     'events': 'Manage Post-Events',
@@ -94,7 +105,11 @@ export default function Staff1Header({ activeSection }) {
                   notifications.map(n => {
                     const isUnread = !(JSON.parse(localStorage.getItem('readNotifications') || '[]').includes(n.id));
                     return (
-                      <div key={n.id} className={`p-4 border-b border-[#202028] last:border-0 transition-colors ${isUnread ? 'bg-[rgba(10,132,255,0.05)] hover:bg-[rgba(10,132,255,0.08)]' : 'hover:bg-[#181822]'}`}>
+                      <div 
+                        key={n.id} 
+                        onClick={() => markAsRead(n.id)}
+                        className={`p-4 border-b border-[#202028] last:border-0 cursor-pointer transition-colors ${isUnread ? 'bg-[rgba(10,132,255,0.05)] hover:bg-[rgba(10,132,255,0.08)]' : 'hover:bg-[#181822]'}`}
+                      >
                         <div className="flex justify-between items-start mb-1">
                           <span className="font-semibold text-white text-sm pr-4">{n.title}</span>
                           {isUnread && <span className="w-2 h-2 shrink-0 bg-[#0a84ff] rounded-full mt-1.5 shadow-[0_0_8px_rgba(10,132,255,0.6)]"></span>}

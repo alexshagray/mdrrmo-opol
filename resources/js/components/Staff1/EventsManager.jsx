@@ -11,7 +11,7 @@ const EVENT_COLORS = {
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export default function EventsManager() {
+export default function EventsManager({ role = 'Staff1' }) {
   const [showEventForm, setShowEventForm] = useState(false);
   const [eventFormData, setEventFormData] = useState({ id: null, title: '', event_type: 'Meeting', description: '', location: '', event_date: '', start_time: '', end_time: '', status: 'Upcoming' });
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -138,8 +138,9 @@ export default function EventsManager() {
   const selectedDateStr = new Date(selectedDate.getTime() - (selectedDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
   
   // Filter events
+  const todayStr = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
   const selectedDayEvents = events.filter(e => e.event_date.startsWith(selectedDateStr));
-  const upcomingEvents = [...events].filter(e => new Date(e.event_date) >= new Date() && e.status !== 'Completed').sort((a,b) => new Date(a.event_date) - new Date(b.event_date));
+  const upcomingEvents = [...events].filter(e => e.event_date >= todayStr && e.status !== 'Completed').sort((a,b) => new Date(a.event_date) - new Date(b.event_date));
   const historyEvents = [...events].filter(e => e.status === 'Completed').sort((a,b) => new Date(b.event_date) - new Date(a.event_date));
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading dashboard...</div>;
@@ -156,12 +157,14 @@ export default function EventsManager() {
           </h2>
           <p className="text-sm text-gray-400 m-0">Manage and organize your events</p>
         </div>
-        <button 
-          className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-5 py-2.5 rounded-lg font-semibold transition-all text-sm flex items-center gap-2 shadow-lg shadow-[#0a84ff]/20"
-          onClick={() => { setEventFormData({ id: null, title: '', event_type: 'Meeting', description: '', location: '', event_date: selectedDateStr, start_time: '', end_time: '', status: 'Upcoming' }); setShowEventForm(true); }}
-        >
-          + Add Event
-        </button>
+        {role === 'Staff1' && (
+          <button 
+            className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-5 py-2.5 rounded-lg font-semibold transition-all text-sm flex items-center gap-2 shadow-lg shadow-[#0a84ff]/20"
+            onClick={() => { setEventFormData({ id: null, title: '', event_type: 'Meeting', description: '', location: '', event_date: selectedDateStr, start_time: '', end_time: '', status: 'Upcoming' }); setShowEventForm(true); }}
+          >
+            + Add Event
+          </button>
+        )}
       </div>
 
       {/* Main Grid */}
@@ -283,14 +286,16 @@ export default function EventsManager() {
                         </div>
                       </div>
                       
-                      <div className="mt-4 pt-3 border-t border-[#1f1f26] flex gap-2">
-                        <button className="flex-1 bg-transparent border border-[#2b2b35] hover:bg-[#2b2b35] text-[#0a84ff] py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2" onClick={() => editEvent(ev)}>
-                          ✏️ Edit Event
-                        </button>
-                        <button className="bg-transparent border border-[#2b2b35] hover:bg-[rgba(255,69,58,0.1)] text-[#ff453a] py-1.5 px-3 rounded-lg text-xs transition-colors" onClick={() => handleDeleteEvent(ev.id)}>
-                          🗑️
-                        </button>
-                      </div>
+                      {role === 'Staff1' && (
+                        <div className="mt-4 pt-3 border-t border-[#1f1f26] flex gap-2">
+                          <button className="flex-1 bg-transparent border border-[#2b2b35] hover:bg-[#2b2b35] text-[#0a84ff] py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2" onClick={() => editEvent(ev)}>
+                            ✏️ Edit Event
+                          </button>
+                          <button className="bg-transparent border border-[#2b2b35] hover:bg-[rgba(255,69,58,0.1)] text-[#ff453a] py-1.5 px-3 rounded-lg text-xs transition-colors" onClick={() => handleDeleteEvent(ev.id)}>
+                            🗑️
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -389,30 +394,32 @@ export default function EventsManager() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-gray-400 text-xs font-medium">Event Date</label>
-                  <input type="date" required value={eventFormData.event_date} onChange={e => setEventFormData({ ...eventFormData, event_date: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
+                  <input type="date" min={todayStr} required value={eventFormData.event_date} onChange={e => setEventFormData({ ...eventFormData, event_date: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-70 hover:[&::-webkit-calendar-picker-indicator]:opacity-100" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
                     <label className="text-gray-400 text-xs font-medium">Start Time</label>
-                    <input type="time" value={eventFormData.start_time} onChange={e => setEventFormData({ ...eventFormData, start_time: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
+                    <input type="time" value={eventFormData.start_time} onChange={e => setEventFormData({ ...eventFormData, start_time: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-70 hover:[&::-webkit-calendar-picker-indicator]:opacity-100" />
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="text-gray-400 text-xs font-medium">End Time</label>
-                    <input type="time" value={eventFormData.end_time} onChange={e => setEventFormData({ ...eventFormData, end_time: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
+                    <input type="time" min={eventFormData.start_time} value={eventFormData.end_time} onChange={e => setEventFormData({ ...eventFormData, end_time: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-70 hover:[&::-webkit-calendar-picker-indicator]:opacity-100" />
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-gray-400 text-xs font-medium">Location</label>
                   <input type="text" value={eventFormData.location} onChange={e => setEventFormData({ ...eventFormData, location: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" placeholder="e.g. Conference Room A" />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-gray-400 text-xs font-medium">Status</label>
-                  <select required value={eventFormData.status} onChange={e => setEventFormData({ ...eventFormData, status: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors">
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
+                {eventFormData.id && (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-400 text-xs font-medium">Status</label>
+                    <select required value={eventFormData.status} onChange={e => setEventFormData({ ...eventFormData, status: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors">
+                      <option value="Upcoming">Upcoming</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                )}
                 <div className="flex flex-col gap-2 md:col-span-2">
                   <label className="text-gray-400 text-xs font-medium">Description</label>
                   <textarea rows="3" value={eventFormData.description} onChange={e => setEventFormData({ ...eventFormData, description: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors w-full resize-y" placeholder="Brief details about the event..."></textarea>

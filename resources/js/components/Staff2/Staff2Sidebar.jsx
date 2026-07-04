@@ -21,6 +21,16 @@ export default function Staff2Sidebar({ activeSection, setActiveSection, setSimu
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         <nav className="flex flex-col gap-2">
+          <button
+            onClick={() => { setActiveSection('dashboard'); setSimulateOpol(false); }}
+            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${activeSection === 'dashboard' ? 'bg-gradient-to-r from-[rgba(10,132,255,0.15)] to-[rgba(52,199,89,0.15)] text-[#0a84ff] border border-[#0a84ff]/30 shadow-[inset_4px_0_0_#0a84ff]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-lg">🏠</span>
+              Overview
+            </span>
+          </button>
+
           <div className="mt-2 mb-2 px-4">
             <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">DISPATCH & MAPS</span>
           </div>
@@ -42,6 +52,16 @@ export default function Staff2Sidebar({ activeSection, setActiveSection, setSimu
             <span className="flex items-center gap-3">
               <span className="text-lg">📡</span>
               Real-Time Monitoring
+            </span>
+          </button>
+
+          <button
+            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${activeSection === 'events' ? 'bg-gradient-to-r from-[rgba(10,132,255,0.15)] to-[rgba(52,199,89,0.15)] text-[#0a84ff] border border-[#0a84ff]/30 shadow-[inset_4px_0_0_#0a84ff]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
+            onClick={() => setActiveSection('events')}
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-lg">📅</span>
+              Events
             </span>
           </button>
         </nav>
