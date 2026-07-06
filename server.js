@@ -44,8 +44,15 @@ app.post('/api/dispatch-report', (req, res) => {
   res.json({ success: true });
 });
 
+const activeResponders = {};
+
 io.on('connection', (socket) => {
   console.log(`[Socket] Client connected: ${socket.id}`);
+
+  // Send cached responders to the newly connected client
+  Object.values(activeResponders).forEach(data => {
+    socket.emit('responderLocationUpdate', data);
+  });
 
   // Listen for incident updates from mobile devices or staff dashboards
   socket.on('incidentUpdate', (incident) => {
@@ -63,7 +70,8 @@ io.on('connection', (socket) => {
 
   // Listen for responder location updates
   socket.on('responderLocationUpdate', (data) => {
-    console.log('[Socket] Responder location update received:', data);
+    activeResponders[data.responderId] = data;
+    console.log(`[Socket] Responder ${data.responderId} update received | Status: ${data.status} | destLat: ${data.destLatitude}`);
     socket.broadcast.emit('responderLocationUpdate', data);
   });
 

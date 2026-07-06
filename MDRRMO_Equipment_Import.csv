@@ -1,0 +1,83 @@
+Name,Condition,Category,Quantity,Unit,Threshold
+"Helmet",New,Equipment,14,pcs,5
+"Gloves",New,Equipment,6,pcs,5
+"Safety Shoes",New,Equipment,9,pcs,5
+"BASIC FIRST AID KIT (Guaze pad (2x2, 3x3,4x4), betadine, cotton balls, alcohol, PNSS, Transpore tape, clean gloves, face mask, Medical scissor, forceps, cohesive bondage, triangular bondage)",New,Equipment,3,pcs,5
+"Automated External Defibrillator,",New,Equipment,1,pcs,5
+"Triangular Bandages",New,Equipment,25,pcs,5
+"Splints",New,Equipment,1,set,5
+"Cervical Collar (Neck Support)",New,Equipment,4,pcs,5
+"Pulse Oximeter",New,Equipment,3,pcs,5
+"Digital BP Apparatus",New,Equipment,2,pcs,5
+"Manual BP Apparatus",New,Equipment,2,pcs,5
+"SPINE/BACK BOARDS",New,Equipment,3,pcs,5
+"Life Buoy",New,Equipment,5,pcs,5
+"Rescue Tube",New,Equipment,2,pcs,5
+"floating rope (11 mm x 30 meters)",New,Equipment,6,pcs,5
+"floating rope (11 mm x 10 meters)",New,Equipment,7,pcs,5
+"floating rope (11 mm x 15 meters)",New,Equipment,4,pcs,5
+"Boat/Banka",New,Equipment,1,pcs,5
+"Megaphone",New,Equipment,1,pcs,5
+"Splint Set",New,Equipment,2,pcs,5
+"Caution Tape",New,Equipment,5,pcs,5
+"Manual Suction",New,Equipment,2,pcs,5
+"Life Vest",New,Equipment,11,pcs,5
+"Shovel",New,Equipment,3,pcs,5
+"Crowbar",New,Equipment,1,pcs,5
+"Mallet hammer",New,Equipment,1,pcs,5
+"Axe",New,Equipment,1,pcs,5
+"Hack Saw",New,Equipment,1,pcs,5
+"Wood Saw",New,Equipment,1,pcs,5
+"Pliers",New,Equipment,1,pcs,5
+"Screwdriver",New,Equipment,1,pcs,5
+"Pulley",New,Equipment,2,pcs,5
+"Pail",New,Equipment,3,pcs,5
+"Long range flashlight",New,Equipment,1,pcs,5
+"Generator Sets  (min 6 Kva)",New,Equipment,1,pcs,5
+"Head lamp",New,Equipment,8,pcs,5
+"GPS Garmin",New,Equipment,1,pcs,5
+"Drones/UAV",New,Equipment,2,pcs,5
+"Chain saw",New,Equipment,1,pcs,5
+"Bolt Cutter",New,Equipment,1,pcs,5
+"Disc Metal Cutter",New,Equipment,1,pcs,5
+"Hydraulic Bottle Jack",New,Equipment,1,pcs,5
+"STAINLESS STEED ""D"" CARABINEERS",New,Equipment,8,pcs,5
+"ALUMINUM ""D"" CARABINEERS",New,Equipment,6,pcs,5
+"CARABINEER(BREAK AND LOCK)",New,Equipment,10,pcs,5
+"Full Body Harness",New,Equipment,2,pcs,5
+"Half Body harness",New,Equipment,2,pcs,5
+"TENDON, LANYARD (22 KN)",New,Equipment,2,pcs,5
+"Rescue Pulley",New,Equipment,2,pcs,5
+"Ascender/descender",New,Equipment,4,pcs,5
+"Rescue 8",New,Equipment,4,pcs,5
+"Freeware Quickdraw Carabineer",New,Equipment,4,pcs,5
+"webbing sling",New,Equipment,6,pcs,5
+"DYNAMIC ROPE (RED) 50M",New,Equipment,1,pcs,5
+"DYNAMIC ROPE (ORANGE) 50M",New,Equipment,1,pcs,5
+"STATIC RESCUE ROPE 30M (4 ORANGE, 3 YELLOW GREEN)",New,Equipment,7,pcs,5
+"50 M 1.5MM STATIC ROPE",New,Equipment,1,pcs,5
+"DESCENDER PIRANA",New,Equipment,2,pcs,5
+"Kendric Extrication Device",New,Equipment,1,pcs,5
+"Road Warning Devices",New,Equipment,4,pcs,5
+"Leg Splint",New,Equipment,1,pcs,5
+"Wood Splint",New,Equipment,1,set,5
+"ICP or Command Tent",New,Equipment,1,pcs,5
+"Tables",New,Equipment,5,pcs,5
+"Chairs",New,Equipment,15,pcs,5
+"Personnel/Squad Tents",New,Equipment,1,pcs,5
+"Boards",New,Equipment,1,pcs,5
+"RESCUE VEHICLE, TOYOTA HILUX",New,Vehicles,1,pcs,5
+"Evacuation Vehicle",New,Vehicles,2,pcs,5
+"Ambulance",New,Vehicles,1,pcs,5
+"Mountain Search and Rescue Vehicle",New,Vehicles,1,pcs,5
+"Motor Cycle",New,Vehicles,1,pcs,5
+"Spreader Cutter",New,Equipment,1,pcs,5
+"Whistle",New,Equipment,4,pcs,5
+"Snorkel set",New,Equipment,2,pcs,5
+"Protective goggles",New,Equipment,6,pcs,5
+"Swimming Goggles",New,Equipment,6,pcs,5
+"Ladder",New,Equipment,1,pcs,5
+"Waterproof Coverall",New,Equipment,10,pcs,5
+"Vikings holedigger",New,Equipment,1,pcs,5
+"Oxygen with regulator",New,Equipment,8,pcs,5
+"Bag Valve Mask",New,Equipment,4,pcs,5

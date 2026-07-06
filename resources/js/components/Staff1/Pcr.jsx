@@ -1,17 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function Pcr({ setNotifications }) {
   const [pcrPage, setPcrPage] = useState(1);
   const [selectedPcr, setSelectedPcr] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setPcrPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   const queryClient = useQueryClient();
 
   const { data: pcrData, isLoading } = useQuery({
-    queryKey: ['pcrReports', pcrPage],
+    queryKey: ['pcrReports', pcrPage, debouncedSearchQuery],
     queryFn: async () => {
-      const response = await fetch(`/api/patient_care_reports?page=${pcrPage}`);
+      let url = `/api/patient_care_reports?page=${pcrPage}`;
+      if (debouncedSearchQuery) url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
+      const response = await fetch(url);
       return response.json();
-    }
+    },
+    placeholderData: (prev) => prev
   });
 
   const pcrReports = pcrData?.data || [];
@@ -474,10 +488,21 @@ export default function Pcr({ setNotifications }) {
   return (
     <>
       <div className="bg-[#111116] border border-white/10 rounded-2xl p-6 shadow-lg mb-6">
-        <h2 className="text-white text-xl font-bold mb-6 flex items-center gap-3">
-          <span className="p-2 bg-[#0a84ff]/20 text-[#0a84ff] rounded-lg">📋</span>
-          Manage Patient Care Records
-        </h2>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+          <h2 className="text-white text-xl font-bold flex items-center gap-3 m-0">
+            <span className="p-2 bg-[#0a84ff]/20 text-[#0a84ff] rounded-lg">📋</span>
+            Manage Patient Care Records
+          </h2>
+          <div className="w-full md:w-72">
+            <input
+              type="text"
+              placeholder="Search by patient name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#0c0c10] border border-[#2b2b35] px-4 py-2 rounded-lg text-sm text-white focus:outline-none focus:border-[#0a84ff] transition-colors"
+            />
+          </div>
+        </div>
         {pcrReports.length === 0 ? (
           <p className="text-gray-400 text-center py-8 bg-white/5 rounded-xl border border-white/10">No patient care records found</p>
         ) : (

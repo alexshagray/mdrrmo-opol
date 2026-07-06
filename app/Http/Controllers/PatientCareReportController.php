@@ -11,9 +11,29 @@ use Illuminate\Support\Facades\Http;
 
 class PatientCareReportController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reports = PatientCareReport::with('user', 'patient')->latest()->paginate(10);
+        $query = PatientCareReport::with('user', 'patient')->latest();
+        
+        if ($request->has('search') && !empty($request->search)) {
+            $searchTerms = explode(' ', $request->search);
+            $query->where(function ($q) use ($searchTerms) {
+                foreach ($searchTerms as $term) {
+                    $term = trim($term);
+                    if ($term !== '') {
+                        $q->where(function ($subQ) use ($term) {
+                            $subQ->whereHas('patient', function ($q2) use ($term) {
+                                $q2->where('first_name', 'LIKE', '%' . $term . '%')
+                                   ->orWhere('last_name', 'LIKE', '%' . $term . '%')
+                                   ->orWhere('middle_name', 'LIKE', '%' . $term . '%');
+                            })->orWhere('pcr_data', 'LIKE', '%' . $term . '%');
+                        });
+                    }
+                }
+            });
+        }
+        
+        $reports = $query->paginate(10);
         return response()->json($reports);
     }
 

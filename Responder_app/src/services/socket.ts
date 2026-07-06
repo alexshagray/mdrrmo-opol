@@ -9,10 +9,11 @@ import Constants from 'expo-constants';
 // Dynamically resolve Metro bundler IP address to support wireless local connection
 const getDevHostIp = (): string => {
   const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
-  if (hostUri) {
+  if (hostUri && !hostUri.includes('172.')) {
     return hostUri.split(':')[0];
   }
-  return '172.18.249.58';
+  // Force the correct Wi-Fi IP address for the user's current network
+  return '192.168.1.14';
 };
 
 const SOCKET_URL = Platform.OS === 'web' 

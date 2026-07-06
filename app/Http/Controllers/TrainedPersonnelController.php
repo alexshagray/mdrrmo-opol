@@ -14,7 +14,15 @@ class TrainedPersonnelController extends Controller
             $query->where('barangay', $request->barangay);
         }
         if ($request->has('search') && !empty($request->search)) {
-            $query->where('name', 'LIKE', '%' . $request->search . '%');
+            $searchTerms = explode(' ', $request->search);
+            $query->where(function ($q) use ($searchTerms) {
+                foreach ($searchTerms as $term) {
+                    $term = trim($term);
+                    if ($term !== '') {
+                        $q->where('name', 'LIKE', '%' . $term . '%');
+                    }
+                }
+            });
         }
         return response()->json($query->paginate(10));
     }

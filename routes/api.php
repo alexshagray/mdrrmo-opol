@@ -71,6 +71,7 @@ Route::get('/responders', [ResponderController::class, 'index']);
 Route::get('inventory/transactions', [InventoryController::class, 'transactions']);
 Route::post('inventory/{id}/stock-in', [InventoryController::class, 'stockIn']);
 Route::post('inventory/{id}/distribute', [InventoryController::class, 'distribute']);
+Route::post('inventory/bulk-upload', [InventoryController::class, 'bulkUpload']);
 Route::apiResource('inventory', InventoryController::class);
 
 // Post Events & Notifications

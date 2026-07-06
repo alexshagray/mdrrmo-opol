@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
-export default function Staff2Header({ activeSection }) {
+export default function Staff2Header({ activeSection, handleLogout }) {
   const [notifications, setNotifications] = useState([]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [currentNotification, setCurrentNotification] = useState(null);
@@ -134,6 +134,13 @@ export default function Staff2Header({ activeSection }) {
                   </div>
               </div>
           )}
+
+          <button
+              onClick={handleLogout}
+              className="bg-[#181822] hover:bg-red-950/30 border border-[#2b2b35] hover:border-red-800/50 text-gray-300 hover:text-red-400 text-sm px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 font-medium"
+          >
+              <span className="text-lg">⏻</span> Sign Out
+          </button>
         </div>
       </div>
 

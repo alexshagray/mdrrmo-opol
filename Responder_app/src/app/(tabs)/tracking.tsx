@@ -235,19 +235,35 @@ export default function TrackingScreen() {
   // Stream responder location updates via Socket.IO
   useEffect(() => {
     if (!responderLocation) return;
-    const socket = getSocket();
-    if (socket) {
-      const payload = {
-        responderId: responderInfo?.id || 1,
-        responderName: responderInfo?.name || 'Emergency Responder',
-        incidentId: callerInfo?.id || 'INC-1002',
-        latitude: responderLocation.latitude,
-        longitude: responderLocation.longitude,
-        status: isSimulating ? 'simulating' : incidentStatus
-      };
-      console.log('[Socket] Emitting responderLocationUpdate:', payload);
-      socket.emit('responderLocationUpdate', payload);
-    }
+    
+    // Broadcast immediately when location changes
+    const emitLocation = () => {
+      const socket = getSocket();
+      if (socket) {
+        const payload = {
+          responderId: responderInfo?.id || 1,
+          responderName: responderInfo?.name || 'Emergency Responder',
+          incidentId: isActiveCall ? (callerInfo?.id || null) : null,
+          latitude: responderLocation.latitude,
+          longitude: responderLocation.longitude,
+          destLatitude: isActiveCall ? (incidentLocation?.latitude || null) : null,
+          destLongitude: isActiveCall ? (incidentLocation?.longitude || null) : null,
+          status: isSimulating ? 'simulating' : incidentStatus
+        };
+        console.log('[Socket] Emitting responderLocationUpdate:', payload);
+        socket.emit('responderLocationUpdate', payload);
+      }
+    };
+
+    emitLocation();
+
+    // Also strictly broadcast every 5 seconds to prevent server timeouts
+    // and handle stationary responders
+    const interval = setInterval(() => {
+      emitLocation();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [responderLocation, responderInfo, callerInfo?.id, isSimulating, incidentStatus]);
 
   const emitIncidentUpdate = (incident: any) => {
@@ -272,11 +288,25 @@ export default function TrackingScreen() {
 
       let initialLoc;
       try {
-        initialLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        // Use getLastKnownPositionAsync first because getCurrentPositionAsync often hangs indefinitely on Android Emulators
+        initialLoc = await Location.getLastKnownPositionAsync();
+        
+        if (!initialLoc) {
+          // If no last known position, try getCurrentPosition with a short 5-second timeout
+          initialLoc = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Location timeout')), 5000))
+          ]);
+        }
       } catch (error) {
-        console.warn('Could not get current position:', error);
-        setErrorMsg('Current location is unavailable. Make sure that location services are enabled.');
-        return; // Early return to prevent unhandled promise rejection downstream
+        console.warn('Could not get current position, using fallback:', error);
+        // Fallback to Cagayan de Oro default coordinates so the app doesn't hang!
+        initialLoc = {
+          coords: {
+            latitude: 8.477217,
+            longitude: 124.645920
+          }
+        };
       }
       
       const currentLoc = {
@@ -286,17 +316,12 @@ export default function TrackingScreen() {
       setResponderLocation(currentLoc);
       setInitialDispatchLocation(currentLoc);
 
-      let finalCallerLoc = passedCallerLocation;
-      if (!finalCallerLoc) {
-        // Fallback or dynamic mockup destination location near Misamis Oriental/Cagayan de Oro area
-        finalCallerLoc = {
-          latitude: currentLoc.latitude + 0.005,
-          longitude: currentLoc.longitude - 0.005,
-        };
+      let finalCallerLoc = passedCallerLocation || null;
+      if (finalCallerLoc) {
         setCallerLocation(finalCallerLoc);
       }
 
-      if (isNearAccident) {
+      if (isNearAccident && finalCallerLoc) {
         setIncidentLocation(finalCallerLoc);
       } else if (accidentAddress) {
         try {
@@ -348,7 +373,7 @@ export default function TrackingScreen() {
       }
       Speech.stop();
     };
-  }, [isSimulating]);
+  }, [isSimulating, incidentStatus, isActiveCall, responderInfo, callerInfo?.id]);
 
   // Auto status update monitor
   useEffect(() => {
@@ -694,7 +719,11 @@ export default function TrackingScreen() {
                 onPress={() => {
                   Alert.alert('Reject Dispatch', 'Are you sure you want to reject this dispatch and remove it from your screen?', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Reject', style: 'destructive', onPress: () => setIsActiveCall(false) }
+                    { text: 'Reject', style: 'destructive', onPress: () => {
+                      setIsActiveCall(false);
+                      setIsSimulating(false);
+                      setIncidentStatus('Rejected');
+                    }}
                   ]);
                 }}
               >

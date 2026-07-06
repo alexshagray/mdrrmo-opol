@@ -29,7 +29,8 @@
     "react-map-gl": "^8.1.1",
     "react-native": "0.85.3",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "xlsx": "^0.18.5"
   },
   "name": "MDRRMO_Management_system",
   "version": "1.0.0"

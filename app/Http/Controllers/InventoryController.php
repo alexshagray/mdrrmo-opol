@@ -26,7 +26,7 @@ class InventoryController extends Controller
         if ($request->has('search') && !empty($request->search)) {
             $query->where('name', 'LIKE', '%' . $request->search . '%');
         }
-        return response()->json($query->paginate(10));
+        return response()->json($query->orderBy('created_at', 'desc')->paginate(500));
     }
 
     public function store(Request $request)
@@ -276,5 +276,97 @@ class InventoryController extends Controller
         }
 
         return response()->json($query->paginate(20));
+    }
+    public function bulkUpload(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file'
+        ]);
+
+        $file = $request->file('csv_file');
+        if (($handle = fopen($file->getRealPath(), 'r')) !== false) {
+            $header = fgetcsv($handle, 1000, ',');
+            
+            // Expected headers roughly: Name, Condition, Category, Quantity, Unit, Threshold
+            
+            $addedCount = 0;
+            $mergedCount = 0;
+
+            while (($data = fgetcsv($handle, 1000, ',')) !== false) {
+                // Ensure row has minimum data (Name, Category, Quantity, Threshold)
+                if (count($data) < 4 || empty($data[0])) continue;
+
+                $name = trim($data[0]);
+                $condition = isset($data[1]) && !empty(trim($data[1])) ? trim($data[1]) : 'New';
+                $category = isset($data[2]) && !empty(trim($data[2])) ? trim($data[2]) : 'Medical Supplies';
+                $quantity = isset($data[3]) ? (int)trim($data[3]) : 0;
+                $unit = isset($data[4]) && !empty(trim($data[4])) ? trim($data[4]) : 'pcs';
+                $threshold = isset($data[5]) ? (int)trim($data[5]) : 10;
+
+                $existingItem = InventoryItem::whereRaw('LOWER(name) = ?', [strtolower($name)])
+                    ->where('item_condition', $condition)
+                    ->first();
+
+                if ($existingItem) {
+                    $newQuantity = $existingItem->quantity + $quantity;
+                    $status = $newQuantity <= $existingItem->threshold ? 'Low Stock' : 'Available';
+                    if ($newQuantity == 0) $status = 'Depleted';
+                    
+                    $existingItem->update([
+                        'quantity' => $newQuantity,
+                        'status' => $status,
+                    ]);
+                    
+                    if ($quantity > 0) {
+                        $batch = $existingItem->batches()->create([
+                            'original_quantity' => $quantity,
+                            'remaining_quantity' => $quantity
+                        ]);
+                        $existingItem->transactions()->create([
+                            'inventory_batch_id' => $batch->id,
+                            'transaction_type' => 'in',
+                            'quantity' => $quantity,
+                            'remarks' => 'Bulk CSV upload (merged)'
+                        ]);
+                    }
+                    $mergedCount++;
+                } else {
+                    $status = $quantity <= $threshold ? 'Low Stock' : 'Available';
+                    if ($quantity == 0) $status = 'Depleted';
+
+                    $item = InventoryItem::create([
+                        'name' => $name,
+                        'item_condition' => $condition,
+                        'category' => $category,
+                        'quantity' => $quantity,
+                        'unit' => $unit,
+                        'threshold' => $threshold,
+                        'status' => $status,
+                    ]);
+
+                    if ($quantity > 0) {
+                        $batch = $item->batches()->create([
+                            'original_quantity' => $quantity,
+                            'remaining_quantity' => $quantity
+                        ]);
+                        $item->transactions()->create([
+                            'inventory_batch_id' => $batch->id,
+                            'transaction_type' => 'in',
+                            'quantity' => $quantity,
+                            'remarks' => 'Bulk CSV upload (initial)'
+                        ]);
+                    }
+                    $addedCount++;
+                }
+            }
+            fclose($handle);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully processed CSV. Added: $addedCount, Merged: $mergedCount"
+            ]);
+        }
+
+        return response()->json(['error' => 'Failed to open CSV file.'], 500);
     }
 }

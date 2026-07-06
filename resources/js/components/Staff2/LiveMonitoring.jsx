@@ -37,7 +37,7 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
       const dy = Math.abs(startCoords[1] - lastFetchedStartCoords.current[1]);
       // ~50m change threshold before re-fetching route to save API calls
       if (dx > 0.0005 || dy > 0.0005) {
-         shouldFetch = true;
+        shouldFetch = true;
       }
     }
 
@@ -61,22 +61,22 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
         console.error("Mapbox Route Error:", err);
       }
     };
-    
+
     fetchRoute();
   }, [startCoords[0], startCoords[1], endCoords[0], endCoords[1]]);
 
   if (!routeGeoJSON) {
     return (
-      <Source 
+      <Source
         id={`resp-route-src-${responderId}`}
-        type="geojson" 
+        type="geojson"
         data={{
           type: 'Feature',
           properties: {},
           geometry: { type: 'LineString', coordinates: [startCoords, endCoords] }
         }}
       >
-        <Layer 
+        <Layer
           id={`resp-route-layer-${responderId}`}
           type="line"
           paint={{
@@ -90,12 +90,12 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
   }
 
   return (
-    <Source 
+    <Source
       id={`resp-route-src-${responderId}`}
-      type="geojson" 
+      type="geojson"
       data={routeGeoJSON}
     >
-      <Layer 
+      <Layer
         id={`resp-route-casing-${responderId}`}
         type="line"
         paint={{
@@ -104,7 +104,7 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
           'line-opacity': 1
         }}
       />
-      <Layer 
+      <Layer
         id={`resp-route-layer-${responderId}`}
         type="line"
         paint={{
@@ -181,7 +181,7 @@ export default function LiveMonitoring({ responders }) {
     filteredMapIncidents.forEach(inc => {
       const lat = parseFloat(inc.latitude);
       const lng = parseFloat(inc.longitude);
-      
+
       if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
         const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
         if (!clusters[key]) {
@@ -216,10 +216,10 @@ export default function LiveMonitoring({ responders }) {
     <div className="relative w-full h-full flex flex-col">
       {/* Dynamic Map Filters */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[95%] pointer-events-none">
-        
+
         {/* Type Filters */}
         <div className="flex gap-2 p-1.5 bg-[#111116]/80 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-x-auto pointer-events-auto custom-scrollbar max-w-full">
-          <button 
+          <button
             className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${activeFilter === 'All' ? 'bg-white text-black' : 'bg-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}
             onClick={() => setActiveFilter('All')}
           >
@@ -239,7 +239,7 @@ export default function LiveMonitoring({ responders }) {
 
         {/* Severity Filters */}
         <div className="flex gap-2 p-1.5 bg-[#111116]/80 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto">
-          <button 
+          <button
             className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all uppercase tracking-wider ${activeSeverity === 'All' ? 'bg-[#3b82f6] text-white' : 'bg-transparent text-gray-500 hover:text-white hover:bg-white/5'}`}
             onClick={() => setActiveSeverity('All')}
           >
@@ -255,8 +255,9 @@ export default function LiveMonitoring({ responders }) {
             </button>
           ))}
         </div>
-
       </div>
+
+
 
       <div className="w-full h-full rounded-2xl overflow-hidden border border-white/10 cursor-grab relative">
         <Map
@@ -288,7 +289,7 @@ export default function LiveMonitoring({ responders }) {
               'sky-atmosphere-sun-intensity': 15
             }}
           />
-          
+
           {/* Opol Zones GeoJSON Overlay */}
           <Source id="opol-zones-source" type="geojson" data="/data/opol_zones.geojson">
             <Layer
@@ -363,7 +364,7 @@ export default function LiveMonitoring({ responders }) {
 
           {/* Render Active Responders */}
           {Object.values(responders).map((resp) => {
-            const isRecent = new Date() - new Date(resp.updatedAt) < 120000;
+            const isRecent = new Date() - new Date(resp.updatedAt) < 86400000; // 24 hours
             if (!isRecent) return null;
 
             const respLat = parseFloat(resp.latitude);
@@ -374,33 +375,57 @@ export default function LiveMonitoring({ responders }) {
             let destLat = null;
             let destLng = null;
 
-            // First check if there's a specific dispatch report for this responder
-            const matchingDispatch = dispatchReports.find(
-              (r) => r.responder_id?.toString() === resp.responderId?.toString()
-            );
-
-            if (matchingDispatch && !isNaN(parseFloat(matchingDispatch.latitude))) {
-              destLat = parseFloat(matchingDispatch.latitude);
-              destLng = parseFloat(matchingDispatch.longitude);
-            } else if (resp.incidentId) {
-              // Otherwise fallback to the incident location if they have one assigned
-              const matchingIncident = incidents.find(
-                (inc) => (inc.id || inc.incident_id)?.toString() === resp.incidentId?.toString()
+            // First try to use the exact destination coordinates provided by the mobile app
+            if (resp.destLatitude && resp.destLongitude) {
+              destLat = parseFloat(resp.destLatitude);
+              destLng = parseFloat(resp.destLongitude);
+            }
+            
+            // Fallback to checking dispatch reports
+            if (destLat === null || destLng === null || destLat === 0 || destLng === 0) {
+              const matchingDispatch = dispatchReports.find(
+                (r) => r.responder_id?.toString() === resp.responderId?.toString()
               );
 
-              if (matchingIncident) {
-                destLat = parseFloat(matchingIncident.latitude);
-                destLng = parseFloat(matchingIncident.longitude);
+              if (matchingDispatch && !isNaN(parseFloat(matchingDispatch.latitude))) {
+                destLat = parseFloat(matchingDispatch.latitude);
+                destLng = parseFloat(matchingDispatch.longitude);
+              } else if (resp.incidentId) {
+                // Otherwise fallback to the incident location if they have one assigned
+                const matchingIncident = incidents.find(
+                  (inc) => (inc.id || inc.incident_id)?.toString() === resp.incidentId?.toString()
+                );
+
+                if (matchingIncident) {
+                  destLat = parseFloat(matchingIncident.latitude);
+                  destLng = parseFloat(matchingIncident.longitude);
+                }
               }
             }
 
-            if (destLat !== null && destLng !== null && destLat !== 0 && destLng !== 0) {
+            const currentStatus = (resp.status || '').toLowerCase();
+            const isResponding = !['rejected', 'available', 'offline'].includes(currentStatus);
+
+            if (isResponding && destLat !== null && destLng !== null && destLat !== 0 && destLng !== 0) {
               polylineComponent = (
-                <ResponderMapRoute 
-                  responderId={resp.responderId} 
-                  startCoords={[respLng, respLat]} 
-                  endCoords={[destLng, destLat]} 
-                />
+                <React.Fragment>
+                  <ResponderMapRoute
+                    responderId={resp.responderId}
+                    startCoords={[respLng, respLat]}
+                    endCoords={[destLng, destLat]}
+                  />
+                  {/* Render the destination marker if the mobile app provided it (since it might not be in the database yet) */}
+                  {resp.destLatitude && (
+                    <Marker longitude={destLng} latitude={destLat} anchor="bottom">
+                      <div className="flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
+                        <div style={markerStyle('#ef4444')}>🚨</div>
+                        <div className="bg-[#111116]/90 backdrop-blur-sm border border-[#ef4444] text-white text-[10px] font-bold px-2 py-1 rounded mt-1 shadow-[0_4px_12px_rgba(239,68,68,0.4)] whitespace-nowrap z-50">
+                          Incident Location
+                        </div>
+                      </div>
+                    </Marker>
+                  )}
+                </React.Fragment>
               );
             }
 
@@ -418,7 +443,7 @@ export default function LiveMonitoring({ responders }) {
                   <div className="flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
                     <div style={markerStyle('#34c759')}>🚑</div>
                     <div className="bg-[#111116]/90 backdrop-blur-sm border border-[#34c759] text-white text-[10px] font-bold px-2 py-1 rounded mt-1 shadow-[0_4px_12px_rgba(52,199,89,0.4)] whitespace-nowrap z-50">
-                      ID {resp.responderId} 
+                      ID {resp.responderId}
                       <span className="text-[#34c759] ml-1.5">• {resp.status || 'Active'}</span>
                     </div>
                   </div>
@@ -492,7 +517,7 @@ export default function LiveMonitoring({ responders }) {
                 <span className="text-[10px] text-[#8e8e93] uppercase tracking-wider font-bold">Total Accidents at Location</span>
               </div>
               <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-xl text-center">
-                <span className="block text-2xl font-bold mb-1" style={{color: selectedMapIncident.color}}>{selectedMapIncident.emoji}</span>
+                <span className="block text-2xl font-bold mb-1" style={{ color: selectedMapIncident.color }}>{selectedMapIncident.emoji}</span>
                 <span className="text-[10px] text-[#8e8e93] uppercase tracking-wider font-bold">Primary Hazard Type</span>
               </div>
             </div>
@@ -502,13 +527,13 @@ export default function LiveMonitoring({ responders }) {
               {selectedMapIncident.incidentsList.map((inc, i) => (
                 <div key={i} className="bg-white/5 border border-white/5 p-4 rounded-xl">
                   <div className="flex justify-between items-center mb-2">
-                    <strong className="text-white text-sm" style={{color: inc.emergency_type?.color_hex}}>{inc.emergency_type?.name || 'Emergency'}</strong>
+                    <strong className="text-white text-sm" style={{ color: inc.emergency_type?.color_hex }}>{inc.emergency_type?.name || 'Emergency'}</strong>
                     <span className="text-xs text-[#8e8e93] font-medium">{inc.created_at ? new Date(inc.created_at).toLocaleString() : 'Recently'}</span>
                   </div>
                   <p className="m-0 mb-1 text-[13px] text-gray-300"><strong>Caller:</strong> {inc.user ? inc.user.first_name : 'Unknown'}</p>
                   <p className="m-0 mb-1 text-[13px] text-gray-300"><strong>Contact:</strong> {inc.user ? inc.user.phone_number : 'Unknown'}</p>
                   <p className="m-0 mb-2 text-[13px] text-gray-300 flex items-center gap-2">
-                    <strong>Status:</strong> 
+                    <strong>Status:</strong>
                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${inc.status === 'completed' ? 'bg-[#34c759]/20 text-[#34c759] border border-[#34c759]/30' : 'bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/30'}`}>{inc.status || 'pending'}</span>
                   </p>
                   {inc.incident_data?.description && (
@@ -520,7 +545,7 @@ export default function LiveMonitoring({ responders }) {
           </div>
         </div>
       )}
-      
+
     </div>
   );
 }

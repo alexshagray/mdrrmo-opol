@@ -6,6 +6,7 @@ export default function Staff1Header({ activeSection }) {
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [currentNotification, setCurrentNotification] = useState(null);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -59,6 +60,33 @@ export default function Staff1Header({ activeSection }) {
     }
   };
 
+  const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      const token = localStorage.getItem('staff1_token');
+      if (token) {
+        await fetch('/api/logout', { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      }
+      localStorage.removeItem('staff1_token');
+      window.location.href = '/staff1';
+    } catch (err) {
+      console.error('Logout failed', err);
+      // Fallback redirect even if fetch fails
+      localStorage.removeItem('staff1_token');
+      window.location.href = '/staff1';
+    }
+  };
+
   const sectionTitles = {
     'dashboard': 'Overview Dashboard',
     'inventory': 'Assets & Supplies Management',
@@ -75,10 +103,11 @@ export default function Staff1Header({ activeSection }) {
         <h2 className="m-0 text-2xl font-bold text-white tracking-wide">
           {sectionTitles[activeSection] || 'Dashboard'}
         </h2>
-        <div className="relative flex items-center">
+        <div className="relative flex items-center gap-3">
           <button
             onClick={() => setShowNotificationsMenu(!showNotificationsMenu)}
             className="relative bg-[#181822] hover:bg-[#20202b] border border-[#2b2b35] text-gray-300 p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+            title="Notifications"
           >
             <span className="text-xl">🔔</span>
             {notifications.length > 0 && (
@@ -86,6 +115,14 @@ export default function Staff1Header({ activeSection }) {
                 {notifications.length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="bg-[#ef4444]/10 hover:bg-[#ef4444]/20 border border-[#ef4444]/30 text-[#ef4444] px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-2"
+            title="Sign Out"
+          >
+            <span>⏻</span> Sign Out
           </button>
 
           {showNotificationsMenu && (
@@ -151,6 +188,40 @@ export default function Staff1Header({ activeSection }) {
                 className="w-full py-3 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-xl transition-all shadow-[0_4px_12px_rgba(239,68,68,0.3)] hover:shadow-[0_6px_16px_rgba(239,68,68,0.4)] hover:-translate-y-0.5"
               >
                 Acknowledge Alert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[1000] animate-in fade-in duration-200">
+          <div className="bg-[#111116] border border-[#2b2b35] rounded-2xl w-[400px] max-w-[90%] shadow-2xl animate-[popIn_0.3s_cubic-bezier(0.175,0.885,0.32,1.275)]">
+            <div className="flex justify-between items-center p-5 border-b border-[#1f1f26] bg-[rgba(239,68,68,0.05)] rounded-t-2xl">
+              <h3 className="m-0 text-[#ef4444] text-lg font-bold flex items-center gap-2">
+                <span className="text-xl">⏻</span> Sign Out
+              </h3>
+              <button onClick={() => setShowLogoutModal(false)} className="text-gray-400 hover:text-white transition-colors bg-transparent border-none text-xl cursor-pointer">
+                ✕
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="m-0 text-gray-300 text-sm leading-relaxed">
+                Are you sure you want to sign out of your account?
+              </p>
+            </div>
+            <div className="p-5 border-t border-[#1f1f26] bg-[#0c0c10] rounded-b-2xl flex justify-end gap-3">
+              <button 
+                onClick={() => setShowLogoutModal(false)} 
+                className="px-5 py-2.5 bg-transparent border border-white/10 hover:bg-white/5 text-gray-300 font-semibold rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmLogout} 
+                className="px-5 py-2.5 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-xl transition-all shadow-[0_4px_12px_rgba(239,68,68,0.3)] hover:shadow-[0_6px_16px_rgba(239,68,68,0.4)] cursor-pointer"
+              >
+                Confirm Sign Out
               </button>
             </div>
           </div>

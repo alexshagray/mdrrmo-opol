@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 
 export default function InventoryManager({ activeSection }) {
   const [inventoryPage, setInventoryPage] = useState(1);
@@ -28,7 +29,123 @@ export default function InventoryManager({ activeSection }) {
   const [formData, setFormData] = useState({ id: null, name: '', item_condition: 'New', category: 'Medical Supplies', quantity: 0, unit: 'pcs', threshold: 10 });
   const [reportText, setReportText] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
-  
+  const [addAnother, setAddAnother] = useState(false);
+  const fileInputRef = React.useRef(null);
+  const [uploadingCsv, setUploadingCsv] = useState(false);
+
+  const downloadCsvTemplate = () => {
+    const defaultCat = activeSection === 'equipment' ? 'Equipment' : 'Medical Supplies';
+    const headers = ['Name', 'Condition', 'Category', 'Quantity', 'Unit', 'Threshold'];
+    const row = ['Example Item', 'New', defaultCat, '50', 'pcs', '10'];
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + '\n' + row.join(',');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "inventory_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingCsv(true);
+
+    try {
+      let csvBlob = file;
+
+      // Automatically convert actual Excel files to CSV behind the scenes
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        let isClientFormat = false;
+        let startRow = 4;
+        
+        // Smart detection for the client's specific DRRM equipment format
+        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+          const rowStr = JSON.stringify(jsonData[i] || []).toUpperCase();
+          if (rowStr.includes('DESCRIPTION/IDENTIFICATION')) {
+            isClientFormat = true;
+            startRow = i + 2; // Data starts 2 rows down from this header
+            break;
+          }
+        }
+
+        if (isClientFormat) {
+          let csvContent = 'Name,Condition,Category,Quantity,Unit,Threshold\n';
+          
+          for (let i = startRow; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            // Stop if we hit empty rows or the footer
+            if (!row || !row[1] || String(row[1]).includes('Prepared By:')) break;
+            
+            const name = String(row[1]).trim().replace(/"/g, '""');
+            if (!name) continue;
+
+            let qty = row[2];
+            let unit = 'pcs';
+            
+            if (typeof qty === 'string') {
+              const match = qty.match(/^(\d+)\s*(.*)$/);
+              if (match) {
+                  qty = parseInt(match[1]);
+                  unit = match[2].trim() || 'pcs';
+              } else {
+                  qty = 0;
+                  unit = 'pcs';
+              }
+            } else if (!qty) {
+              qty = 0;
+            }
+            
+            // Auto-categorize based on item name
+            let category = 'Equipment';
+            const lowerName = name.toLowerCase();
+            if (lowerName.includes('vehicle') || lowerName.includes('ambulance') || lowerName.includes('motor cycle')) {
+                category = 'Vehicles';
+            } else if (lowerName.includes('gloves') || lowerName.includes('kit') || lowerName.includes('bandage') || lowerName.includes('splint') || lowerName.includes('oxygen')) {
+                category = 'Medical Supplies';
+            }
+
+            csvContent += `"${name}",New,${category},${qty},${unit},5\n`;
+          }
+          csvBlob = new Blob([csvContent], { type: 'text/csv' });
+        } else {
+          // Fallback to standard CSV conversion for standard templates
+          const csvString = XLSX.utils.sheet_to_csv(worksheet);
+          csvBlob = new Blob([csvString], { type: 'text/csv' });
+        }
+      }
+
+      const form = new FormData();
+      form.append('csv_file', csvBlob, 'upload.csv');
+
+      const res = await fetch('/api/inventory/bulk-upload', {
+        method: 'POST',
+        body: form
+      });
+      const result = await res.json();
+      if (res.ok) {
+        alert(result.message);
+        fetchData();
+      } else {
+        const errorMsg = result.message || result.error || JSON.stringify(result.errors) || 'Failed to upload file';
+        alert('Upload Error: ' + errorMsg);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error parsing or uploading Excel file');
+    }
+    
+    setUploadingCsv(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // Consumption Report State
   const [transactionsPage, setTransactionsPage] = useState(1);
   const { data: txData, isLoading: loadingTx, refetch: refetchTransactions } = useQuery({
@@ -52,9 +169,12 @@ export default function InventoryManager({ activeSection }) {
   });
 
   const inventory = invData?.data || [];
-  const filteredInventory = inventory.filter(item => 
-    item.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-  );
+  const searchTerms = debouncedSearchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+  const filteredInventory = inventory.filter(item => {
+    if (searchTerms.length === 0) return true;
+    const itemName = item.name.toLowerCase();
+    return searchTerms.every(term => itemName.includes(term));
+  });
   const lowStockItems = filteredInventory.filter(i => i.status === 'Low Stock' || i.status === 'Depleted');
 
   useEffect(() => {
@@ -111,8 +231,12 @@ export default function InventoryManager({ activeSection }) {
       });
 
       if (res.ok) {
-        setShowForm(false);
-        setFormData({ id: null, name: '', item_condition: 'New', category: 'Medical Supplies', quantity: 0, unit: 'pcs', threshold: 10 });
+        if (!addAnother) {
+          setShowForm(false);
+          setFormData({ id: null, name: '', item_condition: 'New', category: 'Medical Supplies', quantity: 0, unit: 'pcs', threshold: 10 });
+        } else {
+          setFormData({ ...formData, id: null, name: '', quantity: 0 });
+        }
         fetchData();
       } else {
         alert('Failed to save item');
@@ -493,19 +617,23 @@ export default function InventoryManager({ activeSection }) {
               className="bg-[#181822] border border-[#2b2b35] rounded-lg text-white text-sm py-2 pl-9 pr-4 focus:border-[#0a84ff] focus:outline-none transition-colors w-64 shadow-inner"
             />
           </div>
-          <button className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-4 py-2 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-[#0a84ff]/20" onClick={() => { setFormData({ id: null, name: '', item_condition: 'New', category: activeSection === 'equipment' ? 'Equipment' : 'Medical Supplies', quantity: 0, unit: 'pcs', threshold: 10 }); setShowForm(true); }}>
-            + Add New Item
-          </button>
+          <div className="flex gap-2">
+            <button className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-4 py-2 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-[#0a84ff]/20 flex items-center gap-2 cursor-pointer" onClick={() => { setFormData({ id: null, name: '', item_condition: 'New', category: activeSection === 'equipment' ? 'Equipment' : 'Medical Supplies', quantity: 0, unit: 'pcs', threshold: 10 }); setShowForm(true); }}>
+              ➕ Add New Item
+            </button>
+          </div>
         </div>
       </div>
       
 
 
       {showForm && (
-        <div className="bg-[#181822] border border-[#2b2b35] rounded-xl p-6 mb-6">
-          <h4 className="text-white text-base font-semibold mb-5">{formData.id ? 'Edit Item' : 'Add New Item'}</h4>
-          <form onSubmit={handleSaveItem}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#181822] border border-[#2b2b35] rounded-xl p-8 w-full max-w-2xl shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button onClick={() => setShowForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors text-lg" type="button">✕</button>
+            <h4 className="text-white text-xl font-bold mb-6">{formData.id ? 'Edit Item' : 'Add New Item'}</h4>
+            <form onSubmit={handleSaveItem}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <div className="flex flex-col gap-2">
                 <label className="text-gray-400 text-xs font-medium">Item Name</label>
                 <input type="text" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
@@ -562,19 +690,28 @@ export default function InventoryManager({ activeSection }) {
                 <input type="number" required min="0" value={formData.threshold} onChange={e => setFormData({ ...formData, threshold: e.target.value === '' ? '' : parseInt(e.target.value) })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
               </div>
             </div>
-            <div className="flex gap-3">
-              <button type="submit" className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-5 py-2.5 rounded-lg font-semibold transition-all text-sm">Save Item</button>
-              <button type="button" className="bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.15)] text-gray-200 px-5 py-2.5 rounded-lg font-semibold transition-all text-sm" onClick={() => setShowForm(false)}>Cancel</button>
-            </div>
-          </form>
+              <div className="flex justify-between items-center mt-6">
+                <div className="flex gap-3">
+                  {formData.id ? (
+                    <button type="submit" onClick={() => setAddAnother(false)} className="bg-[#0a84ff] hover:bg-[#0066cc] text-white px-6 py-2.5 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-[#0a84ff]/20 cursor-pointer">Update Item</button>
+                  ) : (
+                    <button type="submit" onClick={() => setAddAnother(true)} className="bg-[#34c759] hover:bg-[#28a745] text-white px-6 py-2.5 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-[#34c759]/20 cursor-pointer">Save & Add Another</button>
+                  )}
+                  <button type="button" className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.1)] text-gray-200 px-6 py-2.5 rounded-lg font-semibold transition-all text-sm cursor-pointer" onClick={() => setShowForm(false)}>Cancel</button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       {showStockIn && (
-        <div className="bg-[#181822] border border-[#2b2b35] rounded-xl p-6 mb-6">
-          <h4 className="text-white text-base font-semibold mb-5">Add Stock: {transactionData.item?.name}</h4>
-          <form onSubmit={handleStockIn}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#181822] border border-[#2b2b35] rounded-xl p-8 w-full max-w-xl shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button onClick={() => setShowStockIn(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors text-lg" type="button">✕</button>
+            <h4 className="text-white text-xl font-bold mb-6">Add Stock: <span className="text-[#0a84ff]">{transactionData.item?.name}</span></h4>
+            <form onSubmit={handleStockIn}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <div className="flex flex-col gap-2">
                 <label className="text-gray-400 text-xs font-medium">Quantity to Add</label>
                 <input type="number" required min="1" value={transactionData.quantity} onChange={e => setTransactionData({ ...transactionData, quantity: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
@@ -583,20 +720,23 @@ export default function InventoryManager({ activeSection }) {
                 <label className="text-gray-400 text-xs font-medium">Remarks (Optional)</label>
                 <input type="text" value={transactionData.remarks} onChange={e => setTransactionData({ ...transactionData, remarks: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" placeholder="e.g. New delivery from supplier" />
               </div>
-            </div>
-            <div className="flex gap-3">
-              <button type="submit" className="bg-[#34c759] hover:bg-[#28a745] text-white px-5 py-2.5 rounded-lg font-semibold transition-all text-sm">Add Stock</button>
-              <button type="button" className="bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.15)] text-gray-200 px-5 py-2.5 rounded-lg font-semibold transition-all text-sm" onClick={() => setShowStockIn(false)}>Cancel</button>
-            </div>
-          </form>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button type="button" className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.1)] text-gray-200 px-6 py-2.5 rounded-lg font-semibold transition-all text-sm" onClick={() => setShowStockIn(false)}>Cancel</button>
+                <button type="submit" className="bg-[#34c759] hover:bg-[#28a745] text-white px-6 py-2.5 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-[#34c759]/20">Add Stock</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       {showDistribute && (
-        <div className="bg-[#181822] border border-[#2b2b35] rounded-xl p-6 mb-6 border-l-4 border-l-[#ff9f0a]">
-          <h4 className="text-white text-base font-semibold mb-5">{activeSection === 'equipment' ? 'Remove Unusable Item' : 'Distribute Stock'}: {transactionData.item?.name}</h4>
-          <form onSubmit={handleDistribute}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#181822] border border-[#2b2b35] rounded-xl p-8 w-full max-w-xl shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button onClick={() => setShowDistribute(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors text-lg" type="button">✕</button>
+            <h4 className="text-white text-xl font-bold mb-6">{activeSection === 'equipment' ? 'Remove Unusable Item' : 'Distribute Stock'}: <span className="text-[#ff9f0a]">{transactionData.item?.name}</span></h4>
+            <form onSubmit={handleDistribute}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <div className="flex flex-col gap-2">
                 <label className="text-gray-400 text-xs font-medium">{activeSection === 'equipment' ? 'Quantity to Remove' : 'Quantity to Distribute'}</label>
                 <input type="number" required min="1" max={transactionData.item?.quantity} value={transactionData.quantity} onChange={e => setTransactionData({ ...transactionData, quantity: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" />
@@ -606,12 +746,13 @@ export default function InventoryManager({ activeSection }) {
                 <label className="text-gray-400 text-xs font-medium">Remarks / Destination</label>
                 <input type="text" required value={transactionData.remarks} onChange={e => setTransactionData({ ...transactionData, remarks: e.target.value })} className="p-3 bg-[#0c0c10] border border-[#2b2b35] rounded-lg text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors" placeholder={activeSection === 'equipment' ? 'e.g. Damaged beyond repair' : 'e.g. Dispatched to Incident #123'} />
               </div>
-            </div>
-            <div className="flex gap-3">
-              <button type="submit" className="bg-[#ff9f0a] hover:bg-[#e08e09] text-white px-5 py-2.5 rounded-lg font-semibold transition-all text-sm">{activeSection === 'equipment' ? 'Confirm Removal' : 'Confirm Distribution'}</button>
-              <button type="button" className="bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.15)] text-gray-200 px-5 py-2.5 rounded-lg font-semibold transition-all text-sm" onClick={() => setShowDistribute(false)}>Cancel</button>
-            </div>
-          </form>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button type="button" className="bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.1)] text-gray-200 px-6 py-2.5 rounded-lg font-semibold transition-all text-sm" onClick={() => setShowDistribute(false)}>Cancel</button>
+                <button type="submit" className="bg-[#ff9f0a] hover:bg-[#e08e09] text-white px-6 py-2.5 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-[#ff9f0a]/20">{activeSection === 'equipment' ? 'Confirm Removal' : 'Confirm Distribution'}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
