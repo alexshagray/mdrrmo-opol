@@ -22,27 +22,43 @@ const markerStyle = (typeColor, isHistorical = false) => ({
   cursor: 'pointer'
 });
 
+// Calculate bearing between two coordinates
+const calculateBearing = (start, end) => {
+  const startLat = start[1] * Math.PI / 180;
+  const startLng = start[0] * Math.PI / 180;
+  const endLat = end[1] * Math.PI / 180;
+  const endLng = end[0] * Math.PI / 180;
+  const y = Math.sin(endLng - startLng) * Math.cos(endLat);
+  const x = Math.cos(startLat) * Math.sin(endLat) -
+            Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
+  const bearing = Math.atan2(y, x) * 180 / Math.PI;
+  return (bearing + 360) % 360;
+};
+
 const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
   const [routeGeoJSON, setRouteGeoJSON] = useState(null);
-  const lastFetchedStartCoords = useRef(null);
+  const fullRouteCoords = useRef([]);
+  const lastClosestIndex = useRef(0);
+  const lastFetchedEndCoords = useRef(null);
 
+  // 1. Fetch route when destination changes
   useEffect(() => {
     if (!startCoords || !endCoords) return;
 
     let shouldFetch = false;
-    if (!lastFetchedStartCoords.current) {
+    if (!lastFetchedEndCoords.current) {
       shouldFetch = true;
     } else {
-      const dx = Math.abs(startCoords[0] - lastFetchedStartCoords.current[0]);
-      const dy = Math.abs(startCoords[1] - lastFetchedStartCoords.current[1]);
-      // ~50m change threshold before re-fetching route to save API calls
-      if (dx > 0.0005 || dy > 0.0005) {
+      const dx = Math.abs(endCoords[0] - lastFetchedEndCoords.current[0]);
+      const dy = Math.abs(endCoords[1] - lastFetchedEndCoords.current[1]);
+      // Refetch if destination changes significantly
+      if (dx > 0.0001 || dy > 0.0001) {
         shouldFetch = true;
       }
     }
 
     if (!shouldFetch) return;
-    lastFetchedStartCoords.current = startCoords;
+    lastFetchedEndCoords.current = endCoords;
 
     const fetchRoute = async () => {
       try {
@@ -51,10 +67,13 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
         );
         const json = await query.json();
         if (json.routes && json.routes.length > 0) {
+          const coords = json.routes[0].geometry.coordinates;
+          fullRouteCoords.current = coords;
+          lastClosestIndex.current = 0;
           setRouteGeoJSON({
             type: 'Feature',
             properties: {},
-            geometry: json.routes[0].geometry
+            geometry: { type: 'LineString', coordinates: coords }
           });
         }
       } catch (err) {
@@ -63,7 +82,43 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
     };
 
     fetchRoute();
-  }, [startCoords[0], startCoords[1], endCoords[0], endCoords[1]]);
+  }, [endCoords[0], endCoords[1]]);
+
+  // 2. Trim route when startCoords (responder location) changes
+  useEffect(() => {
+    if (!fullRouteCoords.current || fullRouteCoords.current.length === 0 || !startCoords) return;
+    
+    const rLng = startCoords[0];
+    const rLat = startCoords[1];
+    let minDistance = Infinity;
+    
+    let searchStart = lastClosestIndex.current || 0;
+    searchStart = Math.max(0, searchStart - 5);
+    const searchEnd = Math.min(fullRouteCoords.current.length, searchStart + 50);
+    let closestIndex = searchStart;
+
+    for (let i = searchStart; i < searchEnd; i++) {
+      const coord = fullRouteCoords.current[i];
+      const dx = rLng - coord[0];
+      const dy = rLat - coord[1];
+      const dist = dx * dx + dy * dy;
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+
+    lastClosestIndex.current = closestIndex;
+
+    if (closestIndex < fullRouteCoords.current.length) {
+      const trimmedCoords = [[rLng, rLat], ...fullRouteCoords.current.slice(closestIndex)];
+      setRouteGeoJSON({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: trimmedCoords }
+      });
+    }
+  }, [startCoords[0], startCoords[1]]);
 
   if (!routeGeoJSON) {
     return (
@@ -122,9 +177,11 @@ export default function LiveMonitoring({ responders }) {
   const [selectedMapIncident, setSelectedMapIncident] = useState(null);
   const [selectedResponder, setSelectedResponder] = useState(null);
   const [selectedDispatch, setSelectedDispatch] = useState(null);
+  
+  const responderBearings = useRef({});
 
   const [activeFilter, setActiveFilter] = useState('All');
-  const [activeSeverity, setActiveSeverity] = useState('All');
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
 
   const { data: emergencyTypesData } = useQuery({
     queryKey: ['emergencyTypes'],
@@ -171,10 +228,9 @@ export default function LiveMonitoring({ responders }) {
   const filteredMapIncidents = useMemo(() => {
     return mapIncidents.filter(inc => {
       if (activeFilter !== 'All' && inc.emergency_type?.name !== activeFilter) return false;
-      if (activeSeverity !== 'All' && inc.emergency_type?.severity_level !== activeSeverity) return false;
       return true;
     });
-  }, [mapIncidents, activeFilter, activeSeverity]);
+  }, [mapIncidents, activeFilter]);
 
   const clusteredIncidents = useMemo(() => {
     const clusters = {};
@@ -213,53 +269,50 @@ export default function LiveMonitoring({ responders }) {
 
 
   return (
-    <div className="relative w-full h-full flex flex-col">
-      {/* Dynamic Map Filters */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[95%] pointer-events-none">
-
-        {/* Type Filters */}
-        <div className="flex gap-2 p-1.5 bg-[#111116]/80 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-x-auto pointer-events-auto custom-scrollbar max-w-full">
-          <button
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${activeFilter === 'All' ? 'bg-white text-black' : 'bg-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}
-            onClick={() => setActiveFilter('All')}
-          >
-            All Types
-          </button>
-          {emergencyTypes.map(type => (
-            <button
-              key={type.id}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${activeFilter === type.name ? 'text-black' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-              style={activeFilter === type.name ? { backgroundColor: type.color_hex } : {}}
-              onClick={() => setActiveFilter(type.name)}
+    <div className="relative w-full h-full flex flex-col gap-4">
+      {/* Filters Toolbar - Outside the Map */}
+      <div className="w-full flex justify-between items-center z-[105] bg-[#111116]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg">
+        <div className="flex gap-4 items-center w-full flex-wrap">
+          
+          {/* Type Dropdown Filter */}
+          <div className="relative">
+            <button 
+              onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+              className="flex items-center gap-3 px-6 py-2 bg-[#1a1a2e] border border-white/10 rounded-full shadow-inner text-white text-sm font-bold transition-all hover:bg-white/10"
             >
-              <span>{type.emoji_icon}</span> {type.name}
+              <span className="text-lg">
+                {activeFilter === 'All' ? '🌍' : emergencyTypes.find(t => t.name === activeFilter)?.emoji_icon || '⚠️'}
+              </span>
+              {activeFilter === 'All' ? 'All Emergency Types' : activeFilter}
+              <span className={`text-[#8e8e93] text-xs ml-2 transition-transform duration-300 ${typeDropdownOpen ? 'rotate-180' : ''}`}>▼</span>
             </button>
-          ))}
-        </div>
+            
+            {typeDropdownOpen && (
+              <div className="absolute top-[110%] left-0 w-72 max-h-[50vh] overflow-y-auto bg-[#111116] border border-white/10 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.7)] p-2 custom-scrollbar z-[200] flex flex-col gap-1">
+                <button
+                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeFilter === 'All' ? 'bg-[#3b82f6] text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                  onClick={() => { setActiveFilter('All'); setTypeDropdownOpen(false); }}
+                >
+                  <span className="text-lg">🌍</span> All Emergency Types
+                </button>
+                {emergencyTypes.map(type => (
+                  <button
+                    key={type.id}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeFilter === type.name ? 'text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                    style={activeFilter === type.name ? { backgroundColor: type.color_hex } : {}}
+                    onClick={() => { setActiveFilter(type.name); setTypeDropdownOpen(false); }}
+                  >
+                    <span className="text-lg">{type.emoji_icon}</span> {type.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-        {/* Severity Filters */}
-        <div className="flex gap-2 p-1.5 bg-[#111116]/80 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto">
-          <button
-            className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all uppercase tracking-wider ${activeSeverity === 'All' ? 'bg-[#3b82f6] text-white' : 'bg-transparent text-gray-500 hover:text-white hover:bg-white/5'}`}
-            onClick={() => setActiveSeverity('All')}
-          >
-            Any Severity
-          </button>
-          {['Low', 'Medium', 'High', 'Critical'].map(sev => (
-            <button
-              key={sev}
-              className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all uppercase tracking-wider ${activeSeverity === sev ? 'bg-white text-black shadow-lg' : 'bg-transparent text-gray-500 hover:text-white hover:bg-white/5'}`}
-              onClick={() => setActiveSeverity(sev)}
-            >
-              {sev}
-            </button>
-          ))}
         </div>
       </div>
 
-
-
-      <div className="w-full h-full rounded-2xl overflow-hidden border border-white/10 cursor-grab relative">
+      <div className="flex-1 w-full rounded-2xl overflow-hidden border border-white/10 cursor-grab relative">
         <Map
           mapboxAccessToken={MAPBOX_TOKEN}
           initialViewState={{
@@ -312,6 +365,20 @@ export default function LiveMonitoring({ responders }) {
 
           {/* Render Dispatch Reports */}
           {dispatchReports.map((report) => {
+            // Do not show rejected dispatch reports on the map
+            if (report.status_note && report.status_note.toLowerCase() === 'rejected') return null;
+
+            // Check if responder is currently active and actively responding
+            const activeResp = Object.values(responders).find(
+              (r) => r.responderId?.toString() === report.responder_id?.toString()
+            );
+            
+            const currentStatus = activeResp ? (activeResp.status || '').toLowerCase() : '';
+            const isResponding = activeResp && !['rejected', 'available', 'offline'].includes(currentStatus);
+            
+            // Hide static dispatch marker if responder is actively responding (we will draw a destination marker for them)
+            if (isResponding) return null;
+
             const lat = parseFloat(report.latitude);
             const lng = parseFloat(report.longitude);
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return null;
@@ -364,7 +431,7 @@ export default function LiveMonitoring({ responders }) {
 
           {/* Render Active Responders */}
           {Object.values(responders).map((resp) => {
-            const isRecent = new Date() - new Date(resp.updatedAt) < 86400000; // 24 hours
+            const isRecent = new Date() - new Date(resp.updatedAt) < 120000; // 2 minutes (120000ms)
             if (!isRecent) return null;
 
             const respLat = parseFloat(resp.latitude);
@@ -384,7 +451,8 @@ export default function LiveMonitoring({ responders }) {
             // Fallback to checking dispatch reports
             if (destLat === null || destLng === null || destLat === 0 || destLng === 0) {
               const matchingDispatch = dispatchReports.find(
-                (r) => r.responder_id?.toString() === resp.responderId?.toString()
+                (r) => r.responder_id?.toString() === resp.responderId?.toString() &&
+                       (!r.status_note || r.status_note.toLowerCase() !== 'rejected')
               );
 
               if (matchingDispatch && !isNaN(parseFloat(matchingDispatch.latitude))) {
@@ -404,7 +472,7 @@ export default function LiveMonitoring({ responders }) {
             }
 
             const currentStatus = (resp.status || '').toLowerCase();
-            const isResponding = !['rejected', 'available', 'offline'].includes(currentStatus);
+            const isResponding = !['rejected', 'available', 'offline', 'stand by', 'standby'].includes(currentStatus);
 
             if (isResponding && destLat !== null && destLng !== null && destLat !== 0 && destLng !== 0) {
               polylineComponent = (
@@ -414,38 +482,84 @@ export default function LiveMonitoring({ responders }) {
                     startCoords={[respLng, respLat]}
                     endCoords={[destLng, destLat]}
                   />
-                  {/* Render the destination marker if the mobile app provided it (since it might not be in the database yet) */}
-                  {resp.destLatitude && (
-                    <Marker longitude={destLng} latitude={destLat} anchor="bottom">
-                      <div className="flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
-                        <div style={markerStyle('#ef4444')}>🚨</div>
-                        <div className="bg-[#111116]/90 backdrop-blur-sm border border-[#ef4444] text-white text-[10px] font-bold px-2 py-1 rounded mt-1 shadow-[0_4px_12px_rgba(239,68,68,0.4)] whitespace-nowrap z-50">
-                          Incident Location
-                        </div>
+                  {/* Render the destination marker */}
+                  <Marker longitude={destLng} latitude={destLat} anchor="bottom">
+                    <div className="flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
+                      <div style={markerStyle('#ef4444')}>🚨</div>
+                      <div className="bg-[#111116]/90 backdrop-blur-sm border border-[#ef4444] text-white text-[10px] font-bold px-2 py-1 rounded mt-1 shadow-[0_4px_12px_rgba(239,68,68,0.4)] whitespace-nowrap z-50">
+                        Incident Location
                       </div>
-                    </Marker>
-                  )}
+                    </div>
+                  </Marker>
                 </React.Fragment>
               );
             }
+
+            // Calculate bearing for responder icon
+            let bearing = responderBearings.current[resp.responderId]?.bearing || 0;
+            const prevLoc = responderBearings.current[resp.responderId]?.loc;
+            if (prevLoc && (prevLoc[0] !== respLng || prevLoc[1] !== respLat)) {
+                bearing = calculateBearing(prevLoc, [respLng, respLat]);
+            }
+            responderBearings.current[resp.responderId] = {
+                loc: [respLng, respLat],
+                bearing: bearing
+            };
+            const rotationAngle = bearing - 135; // Correcting for 3D isometric front-facing angle
 
             return (
               <React.Fragment key={`resp-${resp.responderId}`}>
                 <Marker
                   longitude={respLng}
                   latitude={respLat}
-                  anchor="bottom"
+                  anchor="center"
                   onClick={(e) => {
                     e.originalEvent.stopPropagation();
                     setSelectedResponder(resp);
                   }}
+                  style={{ zIndex: 100 }}
                 >
                   <div className="flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
-                    <div style={markerStyle('#34c759')}>🚑</div>
-                    <div className="bg-[#111116]/90 backdrop-blur-sm border border-[#34c759] text-white text-[10px] font-bold px-2 py-1 rounded mt-1 shadow-[0_4px_12px_rgba(52,199,89,0.4)] whitespace-nowrap z-50">
-                      ID {resp.responderId}
-                      <span className="text-[#34c759] ml-1.5">• {resp.status || 'Active'}</span>
-                    </div>
+                    {currentStatus === 'offline' ? (
+                      <div className="w-8 h-8 bg-gray-500 rounded-full border-2 border-white flex items-center justify-center shadow-lg relative">
+                        <span className="text-xs relative z-10">💤</span>
+                      </div>
+                    ) : !isResponding ? (
+                      <div className="w-8 h-8 bg-[#0a84ff] rounded-full border-2 border-white flex items-center justify-center shadow-[0_0_15px_rgba(10,132,255,0.6)] relative">
+                        <div className="absolute inset-0 bg-[#0a84ff] rounded-full animate-ping opacity-50"></div>
+                        <span className="text-xs relative z-10 text-white">📍</span>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          width: '54px',
+                          height: '54px',
+                          backgroundImage: 'url("/images/ambulance_green_screen_1783346989156-removebg-preview.png")',
+                          backgroundSize: 'contain',
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'center',
+                          filter: 'drop-shadow(0px 8px 10px rgba(0,0,0,0.5))',
+                          transform: `rotate(${rotationAngle}deg)`,
+                          transition: 'transform 0.5s ease-out'
+                        }}
+                      />
+                    )}
+                    {(() => {
+                      const statusColor = currentStatus === 'offline' ? '#8e8e93' : !isResponding ? '#0a84ff' : '#34c759';
+                      return (
+                        <div 
+                          className="bg-[#111116]/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded mt-1 whitespace-nowrap z-50 transition-all" 
+                          style={{ 
+                            border: `1px solid ${statusColor}`, 
+                            boxShadow: `0 4px 12px ${statusColor}66`,
+                            transform: isResponding ? 'translateY(-10px)' : 'translateY(4px)' 
+                          }}
+                        >
+                          ID {resp.responderId}
+                          <span style={{ color: statusColor, marginLeft: '6px' }}>• {resp.status || 'Active'}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </Marker>
                 {polylineComponent}

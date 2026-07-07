@@ -45,6 +45,8 @@ app.post('/api/dispatch-report', (req, res) => {
 });
 
 const activeResponders = {};
+const socketToResponder = {};
+const responderToSocket = {};
 
 io.on('connection', (socket) => {
   console.log(`[Socket] Client connected: ${socket.id}`);
@@ -70,13 +72,34 @@ io.on('connection', (socket) => {
 
   // Listen for responder location updates
   socket.on('responderLocationUpdate', (data) => {
-    activeResponders[data.responderId] = data;
-    console.log(`[Socket] Responder ${data.responderId} update received | Status: ${data.status} | destLat: ${data.destLatitude}`);
+    const responderId = data.responderId;
+    
+    // Prevent duplicate device fighting: If a new socket tries to update this responder, disconnect the old socket
+    if (responderToSocket[responderId] && responderToSocket[responderId] !== socket.id) {
+      console.log(`[Socket] Disconnecting old socket for Responder ${responderId} to prevent conflicts.`);
+      const oldSocket = io.sockets.sockets.get(responderToSocket[responderId]);
+      if (oldSocket) {
+        oldSocket.disconnect(true);
+      }
+    }
+    
+    responderToSocket[responderId] = socket.id;
+    socketToResponder[socket.id] = responderId;
+    activeResponders[responderId] = data;
+    console.log(`[Socket] Responder ${responderId} update received | Status: ${data.status} | destLat: ${data.destLatitude}`);
     socket.broadcast.emit('responderLocationUpdate', data);
   });
 
   socket.on('disconnect', () => {
     console.log(`[Socket] Client disconnected: ${socket.id}`);
+    const responderId = socketToResponder[socket.id];
+    // Only mark offline if the disconnecting socket was the active owner of this responder
+    if (responderId && responderToSocket[responderId] === socket.id) {
+      activeResponders[responderId].status = 'offline';
+      socket.broadcast.emit('responderLocationUpdate', activeResponders[responderId]);
+      delete socketToResponder[socket.id];
+      delete responderToSocket[responderId];
+    }
   });
 });
 

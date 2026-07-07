@@ -1,0 +1,18 @@
+<lint-module
+    format="1"
+    dir="C:\laragon\www\MDRRMO_Management_system\Responder_app\modules\expo-call-detector\android"
+    name=":expo-call-detector"
+    type="LIBRARY"
+    maven="expo.modules.calldetector:expo-call-detector:0.1.0"
+    agpVersion="8.11.0"
+    buildFolder="build"
+    bootClassPath="c:\Android\platforms\android-36\android.jar;c:\Android\build-tools\35.0.0\core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-36"
+    neverShrinking="true">
+  <lintOptions
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

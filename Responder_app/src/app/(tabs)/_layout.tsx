@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, View } from 'react-native';
+import * as Location from 'expo-location';
+import { getSocket, initializeSocket, isTrackingActive } from '@/services/socket';
+import { fetchUserProfile } from '@/services/api';
 
 const TabIcon = ({ focused, name, outlineName, color }: { focused: boolean, name: any, outlineName: any, color: string }) => (
   <View style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
@@ -21,6 +24,68 @@ const TabIcon = ({ focused, name, outlineName, color }: { focused: boolean, name
 );
 
 export default function TabsLayout() {
+  useEffect(() => {
+    let locationSubscription: Location.LocationSubscription | null = null;
+    let broadcastInterval: ReturnType<typeof setInterval> | null = null;
+    let currentLoc: any = null;
+    let responderInfo: any = null;
+
+    (async () => {
+      try {
+        const profile = await fetchUserProfile();
+        if (profile) {
+          responderInfo = { id: profile.id, name: profile.name };
+        }
+      } catch (err) {
+        console.warn('[_layout] Failed to fetch user profile:', err);
+      }
+
+      initializeSocket();
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      locationSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 5000,
+          distanceInterval: 10,
+        },
+        (newLoc) => {
+          currentLoc = {
+            latitude: newLoc.coords.latitude,
+            longitude: newLoc.coords.longitude,
+          };
+        }
+      );
+
+      broadcastInterval = setInterval(() => {
+        // If tracking tab is active, let it handle the broadcasting to avoid conflicts
+        if (!currentLoc || !responderInfo || isTrackingActive) return;
+        
+        const socket = getSocket();
+        if (socket) {
+          const payload = {
+            responderId: responderInfo.id,
+            responderName: responderInfo.name,
+            incidentId: null,
+            latitude: currentLoc.latitude,
+            longitude: currentLoc.longitude,
+            destLatitude: null,
+            destLongitude: null,
+            status: 'available'
+          };
+          socket.emit('responderLocationUpdate', payload);
+        }
+      }, 5000);
+    })();
+
+    return () => {
+      if (locationSubscription) locationSubscription.remove();
+      if (broadcastInterval) clearInterval(broadcastInterval);
+    };
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

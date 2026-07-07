@@ -131,7 +131,7 @@ export default function AuthScreen() {
           {/* Custom MDRRMO Logo */}
           <View style={styles.logoContainer}>
             <Image 
-              source={require('../../assets/images/mdrrmo_logo.png')} 
+              source={require('../../assets/images/mdrrmo_logo.jpg')} 
               style={{ width: 120, height: 120, resizeMode: 'contain' }} 
             />
           </View>

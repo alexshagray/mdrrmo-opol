@@ -294,24 +294,27 @@ export default function Staff2App() {
           handleLogout={handleLogout}
         />
         
-        {activeSection === 'dashboard' && <Staff2Overview setActiveSection={setActiveSection} responders={responders} />}
-        {activeSection === 'incidents' && <Incidents setNotifications={setNotifications} />}
+        <div className="scrollable-content custom-scrollbar">
+          {activeSection === 'dashboard' && <Staff2Overview setActiveSection={setActiveSection} responders={responders} />}
+          {activeSection === 'incidents' && <Incidents setNotifications={setNotifications} />}
 
-        {activeSection === 'live_monitoring' && (
-          <Staff2Dashboard responders={responders} setNotifications={setNotifications} />
-        )}
+          {activeSection === 'live_monitoring' && (
+            <Staff2Dashboard responders={responders} setNotifications={setNotifications} />
+          )}
 
-        {activeSection === 'events' && (
-          <div className="p-8 h-full overflow-y-auto">
-            <EventsManager role="Staff2" />
-          </div>
-        )}
+          {activeSection === 'events' && (
+            <div className="h-full">
+              <EventsManager role="Staff2" />
+            </div>
+          )}
+        </div>
       </div>
 
       <style>{`
         .staff2-dashboard {
           display: flex;
-          min-height: 100vh;
+          height: 100vh;
+          overflow: hidden;
           background: linear-gradient(135deg, #08080a 0%, #1a1a2e 100%);
         }
 
@@ -371,6 +374,13 @@ export default function Staff2App() {
         }
 
         .main-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        .scrollable-content {
           flex: 1;
           padding: 32px;
           overflow-y: auto;

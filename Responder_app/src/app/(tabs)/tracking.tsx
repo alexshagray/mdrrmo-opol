@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,8 +25,8 @@ import { CallDetectorModule } from 'expo-call-detector';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { savePatientCareReport, fetchUserProfile } from '@/services/api';
-import { getSocket, initializeSocket } from '@/services/socket';
-import { useAuth } from '@/context/AuthContext';
+import { getSocket, initializeSocket, setTrackingActive } from '@/services/socket';
+
 import MapboxMap from '@/components/MapboxMap';
 import { MaterialIcons } from '@expo/vector-icons';
 import { robustGeocode } from '@/utils/geocoding';
@@ -60,6 +60,8 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
 
   return R * c; // in meters
 }
+
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function TrackingScreen() {
   const router = useRouter();
@@ -129,7 +131,7 @@ export default function TrackingScreen() {
   const [isSimulating, setIsSimulating] = useState(false);
 
   // Response Status
-  const [incidentStatus, setIncidentStatus] = useState('Assigned');
+  const [incidentStatus, setIncidentStatus] = useState('Stand By');
 
   const { height: screenHeight } = Dimensions.get('window');
   const mapHeightValue = useRef(screenHeight * 0.45);
@@ -232,39 +234,47 @@ export default function TrackingScreen() {
     }
   }, [callerInfo.id]);
 
-  // Stream responder location updates via Socket.IO
-  useEffect(() => {
-    if (!responderLocation) return;
-    
-    // Broadcast immediately when location changes
-    const emitLocation = () => {
-      const socket = getSocket();
-      if (socket) {
-        const payload = {
-          responderId: responderInfo?.id || 1,
-          responderName: responderInfo?.name || 'Emergency Responder',
-          incidentId: isActiveCall ? (callerInfo?.id || null) : null,
-          latitude: responderLocation.latitude,
-          longitude: responderLocation.longitude,
-          destLatitude: isActiveCall ? (incidentLocation?.latitude || null) : null,
-          destLongitude: isActiveCall ? (incidentLocation?.longitude || null) : null,
-          status: isSimulating ? 'simulating' : incidentStatus
-        };
-        console.log('[Socket] Emitting responderLocationUpdate:', payload);
-        socket.emit('responderLocationUpdate', payload);
-      }
-    };
+  // Stream responder location updates via Socket.IO ONLY when this specific screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      setTrackingActive(true);
 
-    emitLocation();
+      if (!responderLocation || !responderInfo?.id) return;
+      
+      // Broadcast immediately when location changes
+      const emitLocation = () => {
+        const socket = getSocket();
+        if (socket) {
+          const payload = {
+            responderId: responderInfo.id,
+            responderName: responderInfo?.name || 'Emergency Responder',
+            incidentId: isActiveCall ? (callerInfo?.id || null) : null,
+            latitude: responderLocation.latitude,
+            longitude: responderLocation.longitude,
+            destLatitude: isActiveCall ? (incidentLocation?.latitude || null) : null,
+            destLongitude: isActiveCall ? (incidentLocation?.longitude || null) : null,
+            status: isSimulating ? 'simulating' : incidentStatus
+          };
+          console.log('[Socket] Emitting responderLocationUpdate:', payload);
+          socket.emit('responderLocationUpdate', payload);
+        }
+      };
 
-    // Also strictly broadcast every 5 seconds to prevent server timeouts
-    // and handle stationary responders
-    const interval = setInterval(() => {
       emitLocation();
-    }, 5000);
 
-    return () => clearInterval(interval);
-  }, [responderLocation, responderInfo, callerInfo?.id, isSimulating, incidentStatus]);
+      // Also strictly broadcast every 5 seconds to prevent server timeouts
+      // and handle stationary responders
+      const interval = setInterval(() => {
+        emitLocation();
+      }, 5000);
+
+      // Cleanup when the screen loses focus (e.g., navigated away or pushed to background stack)
+      return () => {
+        setTrackingActive(false);
+        clearInterval(interval);
+      };
+    }, [responderLocation, responderInfo, callerInfo?.id, isSimulating, incidentStatus, isActiveCall, incidentLocation])
+  );
 
   const emitIncidentUpdate = (incident: any) => {
     const socket = getSocket();
@@ -286,7 +296,7 @@ export default function TrackingScreen() {
         return;
       }
 
-      let initialLoc;
+      let initialLoc: any;
       try {
         // Use getLastKnownPositionAsync first because getCurrentPositionAsync often hangs indefinitely on Android Emulators
         initialLoc = await Location.getLastKnownPositionAsync();
@@ -435,27 +445,8 @@ export default function TrackingScreen() {
       setSpokenMilestones((prev) => ({ ...prev, m500: true }));
     }
 
-    let minDistanceToRoute = Infinity;
-    routeCoordinates.forEach((coord) => {
-      const dist = getDistance(
-        responderLocation.latitude,
-        responderLocation.longitude,
-        coord.latitude,
-        coord.longitude
-      );
-      if (dist < minDistanceToRoute) {
-        minDistanceToRoute = dist;
-      }
-    });
-
-    if (minDistanceToRoute > 50) {
-      if (!isOffRoute) {
-        setIsOffRoute(true);
-        speakGuidance('You are off route. Recalculating...');
-      }
-    } else {
-      setIsOffRoute(false);
-    }
+    // Removed flawed vertex-based off-route detection. 
+    // Mapbox route geometries are sparse, so distance to nearest vertex is often > 50m even when on the road.
 
     routeSteps.forEach((step) => {
       if (spokenSteps.includes(step.index)) return;
@@ -506,6 +497,7 @@ export default function TrackingScreen() {
   const startResponding = () => {
     if (!responderLocation || !incidentLocation) return;
     setIsRespondingRoute(true);
+    setIncidentStatus('Assigned');
     speakGuidance('Navigation started. Go straight ahead.');
     Alert.alert('Response Started', 'Telemetry tracking active. Voice guidance enabled.');
   };
@@ -607,6 +599,7 @@ export default function TrackingScreen() {
                   callerLocation={callerLocation}
                   incidentLocation={incidentLocation}
                   isResponding={isRespondingRoute}
+                  isOffRoute={isOffRoute}
                   onRouteUpdate={handleRouteUpdate}
                 />
 
@@ -722,7 +715,7 @@ export default function TrackingScreen() {
                     { text: 'Reject', style: 'destructive', onPress: () => {
                       setIsActiveCall(false);
                       setIsSimulating(false);
-                      setIncidentStatus('Rejected');
+                      setIncidentStatus('Stand By');
                     }}
                   ]);
                 }}

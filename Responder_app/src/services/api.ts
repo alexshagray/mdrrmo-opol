@@ -48,8 +48,15 @@ export const deleteStorageItem = async (key: string) => {
   }
 };
 
-// Use ngrok tunnel URL to bypass local network / firewall issues
+// --- CHOOSE YOUR CONNECTION METHOD (Uncomment the one you want to use) ---
+
+// Option 1: Ngrok Tunnel (Works anywhere over the internet)
 const API_BASE_URL = 'https://overtone-luminance-monopoly.ngrok-free.dev/api';
+
+// Option 2: Local Wi-Fi Network (Requires phone and PC on same Wi-Fi)
+// const API_BASE_URL = Platform.OS === 'web' 
+//   ? 'http://127.0.0.1:8000/api' 
+//   : `http://${getDevHostIp()}:8000/api`;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -95,6 +102,17 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// --- DATA APIS ---
+export const getEmergencyTypes = async () => {
+  try {
+    const response = await apiClient.get('/emergency_types');
+    return response.data;
+  } catch (error) {
+    console.warn('[API Error] Failed to fetch emergency types', error);
+    throw error;
+  }
+};
 
 // --- AUTHENTICATION APIS ---
 

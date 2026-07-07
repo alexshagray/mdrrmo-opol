@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 interface Coordinate {
@@ -12,6 +12,7 @@ interface MapboxMapProps {
   callerLocation: Coordinate | null;
   incidentLocation: Coordinate | null;
   isResponding?: boolean;
+  isOffRoute?: boolean;
   onRouteUpdate?: (data: {
     totalDistance: number;
     coordinates: Coordinate[];
@@ -24,9 +25,13 @@ export default function MapboxMap({
   callerLocation,
   incidentLocation,
   isResponding = false,
+  isOffRoute = false,
   onRouteUpdate,
 }: MapboxMapProps) {
   const webViewRef = useRef<WebView>(null);
+
+  // Resolve local image URI for the ambulance icon
+  const ambulanceIconUri = Image.resolveAssetSource(require('../../assets/images/ambulance_green_screen_1783346989156-removebg-preview.png')).uri;
 
   // Send coordinates and state updates to Mapbox HTML inside WebView
   useEffect(() => {
@@ -36,10 +41,12 @@ export default function MapboxMap({
         callerLocation,
         incidentLocation,
         isResponding,
+        isOffRoute,
+        ambulanceIconUri,
       };
       webViewRef.current.postMessage(JSON.stringify(data));
     }
-  }, [responderLocation, callerLocation, incidentLocation, isResponding]);
+  }, [responderLocation, callerLocation, incidentLocation, isResponding, ambulanceIconUri]);
 
   const mapboxHtml = `
     <!DOCTYPE html>
@@ -84,6 +91,20 @@ export default function MapboxMap({
         let responderMarker = null;
         let callerMarker = null;
         let incidentMarker = null;
+        let previousResponderLngLat = null;
+        let currentBearing = 0;
+
+        function calculateBearing(start, end) {
+            const startLat = start[1] * Math.PI / 180;
+            const startLng = start[0] * Math.PI / 180;
+            const endLat = end[1] * Math.PI / 180;
+            const endLng = end[0] * Math.PI / 180;
+            const y = Math.sin(endLng - startLng) * Math.cos(endLat);
+            const x = Math.cos(startLat) * Math.sin(endLat) -
+                      Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
+            const bearing = Math.atan2(y, x) * 180 / Math.PI;
+            return (bearing + 360) % 360;
+        }
 
         const opolZonesGeoJSON = {
           "type": "FeatureCollection",
@@ -109,6 +130,22 @@ export default function MapboxMap({
             el.style.width = '36px';
             el.style.height = '36px';
             el.innerHTML = emoji;
+            return el;
+        }
+
+        function createImageMarkerElement(imageUrl) {
+            const el = document.createElement('div');
+            el.className = 'custom-marker';
+            el.style.backgroundColor = 'transparent';
+            el.style.border = 'none';
+            el.style.boxShadow = 'none';
+            el.style.backgroundImage = 'url("' + imageUrl + '")';
+            el.style.backgroundSize = 'contain';
+            el.style.backgroundRepeat = 'no-repeat';
+            el.style.backgroundPosition = 'center';
+            el.style.width = '54px';
+            el.style.height = '54px';
+            el.style.filter = 'drop-shadow(0px 8px 10px rgba(0,0,0,0.5))';
             return el;
         }
 
@@ -244,6 +281,9 @@ export default function MapboxMap({
 
         window.userPanned = false;
         window.latestStart = null;
+        window.lastIncidentLoc = null;
+        window.hasRoute = false;
+        window.lastClosestIndex = 0;
         let latestRouteCoords = [];
 
         async function getRoute(start, end) {
@@ -262,6 +302,7 @@ export default function MapboxMap({
                 const data = json.routes[0];
                 const route = data.geometry.coordinates;
                 latestRouteCoords = route;
+                window.lastClosestIndex = 0;
                 
                 if (map.getSource('route')) {
                     map.getSource('route').setData({
@@ -314,12 +355,68 @@ export default function MapboxMap({
                 bounds.extend(lngLat);
                 hasPoints = true;
                 
+                if (previousResponderLngLat && (previousResponderLngLat[0] !== lngLat[0] || previousResponderLngLat[1] !== lngLat[1])) {
+                    // Update bearing only if location actually changed
+                    currentBearing = calculateBearing(previousResponderLngLat, lngLat);
+                }
+                previousResponderLngLat = lngLat;
+                
+                // The generated isometric image's front naturally points towards South-East (~135 degrees).
+                // We subtract 135 to correct the rotation offset so it faces the actual travel direction.
+                const rotationAngle = currentBearing - 135;
+                
                 if (!responderMarker) {
-                    responderMarker = new mapboxgl.Marker({ element: createMarkerElement('🚑', '#34c759') })
+                    responderMarker = new mapboxgl.Marker({ 
+                            element: createImageMarkerElement(data.ambulanceIconUri || ''),
+                            rotationAlignment: 'map'
+                        })
                         .setLngLat(lngLat)
+                        .setRotation(rotationAngle)
                         .addTo(map);
                 } else {
                     responderMarker.setLngLat(lngLat);
+                    responderMarker.setRotation(rotationAngle);
+                    if (data.ambulanceIconUri) {
+                        responderMarker.getElement().style.backgroundImage = 'url("' + data.ambulanceIconUri + '")';
+                    }
+                }
+
+                // Visually trim the route behind the ambulance
+                if (latestRouteCoords && latestRouteCoords.length > 0) {
+                    const rLng = lngLat[0];
+                    const rLat = lngLat[1];
+                    let minDistance = Infinity;
+                    let searchStart = window.lastClosestIndex || 0;
+                    searchStart = Math.max(0, searchStart - 5); // Allow slight backwards search for drift
+                    const searchEnd = Math.min(latestRouteCoords.length, searchStart + 50); // Don't search the whole route to avoid jumping on loops
+                    let closestIndex = searchStart;
+                    
+                    for (let i = searchStart; i < searchEnd; i++) {
+                        const coord = latestRouteCoords[i];
+                        const dx = rLng - coord[0];
+                        const dy = rLat - coord[1];
+                        const dist = dx*dx + dy*dy;
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            closestIndex = i;
+                        }
+                    }
+                    window.lastClosestIndex = closestIndex;
+                    
+                    if (closestIndex < latestRouteCoords.length) {
+                        // Connect current location cleanly to the remaining route
+                        const trimmedRoute = [[rLng, rLat], ...latestRouteCoords.slice(closestIndex)];
+                        if (map.getSource('route')) {
+                            map.getSource('route').setData({
+                                type: 'Feature',
+                                properties: {},
+                                geometry: {
+                                    type: 'LineString',
+                                    coordinates: trimmedRoute
+                                }
+                            });
+                        }
+                    }
                 }
             } else if (responderMarker) {
                 if (responderMarker) responderMarker.remove();
@@ -408,7 +505,12 @@ export default function MapboxMap({
                 const end = [data.incidentLocation.longitude, data.incidentLocation.latitude];
                 window.latestStart = start;
                 
-                getRoute(start, end);
+                const endStr = end.join(',');
+                if (window.lastIncidentLoc !== endStr || !window.hasRoute || data.isOffRoute) {
+                    window.lastIncidentLoc = endStr;
+                    window.hasRoute = true;
+                    getRoute(start, end);
+                }
                 
                 // Keep camera centered on responder when routing
                 if (!window.userPanned) {
@@ -422,6 +524,7 @@ export default function MapboxMap({
                         geometry: { type: 'LineString', coordinates: [] }
                     });
                 }
+                window.hasRoute = false;
             }
         }
 
@@ -465,7 +568,7 @@ export default function MapboxMap({
         }}
         onLoadEnd={() => {
           if (webViewRef.current) {
-            const data = { responderLocation, callerLocation, incidentLocation, isResponding };
+            const data = { responderLocation, callerLocation, incidentLocation, isResponding, isOffRoute, ambulanceIconUri };
             webViewRef.current.postMessage(JSON.stringify(data));
           }
         }}

@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { CallDetectorModule } from 'expo-call-detector';
-import { checkResidentDatabase, reportIncident } from '@/services/api';
+import { checkResidentDatabase, reportIncident, getEmergencyTypes } from '@/services/api';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import GISMapPicker from '@/components/GISMapPicker';
@@ -29,15 +29,7 @@ import { ALL_LOCATIONS } from '@/data/opol-locations';
 
 const BARANGAYS = ['Awang', 'Barra', 'Bagocboc', 'Bonbon', 'Cauyunan', 'Igpit', 'Luyong Bonbon', 'Limunda', 'Malanang', 'Nangcaon', 'Patag', 'Poblacion', 'Tingalan', 'Taboc'];
 
-const EMERGENCY_TYPES = [
-  'LANDSLIDE/ MOUNTAIN SEARCH & RESCUE',
-  'Medical Emergency',
-  'Vehicular Accident',
-  'Fire Incident',
-  'Drowning',
-  'Earthquake/Collapsed Structure',
-  'Flood/Water Rescue'
-];
+// EMERGENCY_TYPES are now fetched dynamically from the database via API.
 
 const { width } = Dimensions.get('window');
 
@@ -59,7 +51,29 @@ export default function IncomingCallScreen() {
   const [callActive, setCallActive] = useState(false);
   const [duration, setDuration] = useState(0);
   const [isNavigatingAway, setIsNavigatingAway] = useState(false);
+  const [emergencyTypes, setEmergencyTypes] = useState<string[]>([]);
   const navigation = useNavigation();
+
+  useEffect(() => {
+    const fetchTypes = async () => {
+      try {
+        const types = await getEmergencyTypes();
+        setEmergencyTypes(types.map((t: any) => t.name));
+      } catch (error) {
+        console.warn('Failed to load emergency types, using fallback', error);
+        setEmergencyTypes([
+          'LANDSLIDE/ MOUNTAIN SEARCH & RESCUE',
+          'Medical Emergency',
+          'Vehicular Accident',
+          'Fire Incident',
+          'Drowning',
+          'Earthquake/Collapsed Structure',
+          'Flood/Water Rescue'
+        ]);
+      }
+    };
+    fetchTypes();
+  }, []);
 
   // Database checks & form state
   const [isCheckingDB, setIsCheckingDB] = useState(false);
@@ -613,7 +627,7 @@ export default function IncomingCallScreen() {
       <SearchableSelectModal 
         visible={showEmergencyModal} 
         onClose={() => setShowEmergencyModal(false)} 
-        data={EMERGENCY_TYPES} 
+        data={emergencyTypes} 
         onSelect={setIncidentDetails} 
         title="Select Nature of Emergency" 
         allowCustomAdd={true}

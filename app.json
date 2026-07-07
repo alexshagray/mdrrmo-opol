@@ -1,5 +1,10 @@
 {
   "android": {
     "package": "com.palobog.mdrrmo_management_system"
+  },
+  "extra": {
+    "eas": {
+      "projectId": "b55cdda2-0bea-4cb5-a2ca-3e962e98ced7"
+    }
   }
 }

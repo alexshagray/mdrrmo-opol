@@ -66,7 +66,7 @@ export default function Staff2Header({ activeSection, handleLogout }) {
 
   return (
     <>
-      <div className="flex justify-between items-center px-8 py-6 border-b border-[#1f1f26] bg-[#0c0c10]/80 backdrop-blur-md sticky top-0 z-40">
+      <div className="flex justify-between items-center px-8 py-6 border-b border-[#1f1f26] bg-[#0c0c10] z-[1001]">
         <div className="flex items-center gap-4">
           <span className="bg-[rgba(10,132,255,0.1)] text-[#0a84ff] px-3 py-1 rounded-full text-xs font-bold border border-[#0a84ff]/30">
             Staff 2 - Response

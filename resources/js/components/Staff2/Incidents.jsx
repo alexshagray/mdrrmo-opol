@@ -13,7 +13,7 @@ export default function Incidents({ setNotifications }) {
     }
   });
 
-  const incidents = incidentsData?.data || [];
+  const incidents = (incidentsData?.data || []).filter(inc => inc.status === 'completed');
 
   const deleteIncidentMutation = useMutation({
     mutationFn: async (id) => {
