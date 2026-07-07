@@ -6,14 +6,15 @@ export default function Incidents({ setNotifications }) {
   const queryClient = useQueryClient();
 
   const { data: incidentsData, isLoading } = useQuery({
-    queryKey: ['incidents', incidentPage],
+    queryKey: ['incidents', 'completed', incidentPage],
     queryFn: async () => {
-      const response = await fetch(`/api/incidents?page=${incidentPage}`);
+      const response = await fetch(`/api/incidents?page=${incidentPage}&status=completed`);
       return response.json();
-    }
+    },
+    keepPreviousData: true
   });
 
-  const incidents = (incidentsData?.data || []).filter(inc => inc.status === 'completed');
+  const incidents = incidentsData?.data || [];
 
   const deleteIncidentMutation = useMutation({
     mutationFn: async (id) => {

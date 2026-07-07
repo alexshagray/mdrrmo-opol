@@ -7,15 +7,18 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
   const [activeTab, setActiveTab] = useState('incidents');
 
   // Fetch incidents for the incidents list
-  const { data: incidentsData } = useQuery({
+  const { data: incidentsData, isFetching } = useQuery({
     queryKey: ['incidents', incidentPage],
     queryFn: async () => {
       const response = await fetch(`/api/incidents?page=${incidentPage}`);
       return response.json();
-    }
+    },
+    keepPreviousData: true
   });
 
   const incidents = incidentsData?.data || [];
+  const currentIncidentPage = incidentsData?.current_page || 1;
+  const lastIncidentPage = incidentsData?.last_page || 1;
   const activeIncidents = incidents.filter(i => i.status !== 'completed');
   const dispatchedIncidents = incidents.filter(i => i.status === 'dispatched');
   const resolvedIncidents = incidents.filter(i => i.status === 'completed');
@@ -48,9 +51,9 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
       {/* Main Grid */}
       <div className="grid grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-[700px]">
         {/* Map Column */}
-        <div className="col-span-8 h-full flex flex-col gap-6">
+        <div className="col-span-12 lg:col-span-8 h-full flex flex-col gap-6 min-h-0">
           {/* Map */}
-          <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex-1 flex flex-col relative overflow-hidden h-full">
+          <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex-1 flex flex-col relative overflow-hidden min-h-0">
             <div className="flex justify-between items-center mb-4 z-10 relative">
               <h3 className="m-0 text-sm font-bold text-gray-300 flex items-center gap-2">
                 <span className="text-lg">🗺️</span> Incident map - Opol Municipality
@@ -64,8 +67,8 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
         </div>
 
         {/* Sidebar Tabs */}
-        <div className="col-span-4 h-full flex flex-col gap-6">
-          <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg h-full flex flex-col relative overflow-hidden">
+        <div className="col-span-12 lg:col-span-4 h-full flex flex-col gap-6 min-h-0">
+          <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex-1 flex flex-col relative overflow-hidden min-h-0">
             <div className="flex gap-4 mb-4 border-b border-[#1f1f26] pb-2">
               <button 
                 onClick={() => setActiveTab('incidents')}
@@ -89,43 +92,69 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
             
             <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-3 pr-2">
               {activeTab === 'incidents' ? (
-                activeIncidents.length === 0 ? (
-                  <div className="text-center text-xs text-gray-500 mt-10">No active incidents</div>
-                ) : (
-                  activeIncidents.map(inc => (
-                  <div key={inc.id || inc.incident_id} className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: inc.emergency_type?.color_hex || '#a855f7', boxShadow: `0 0 8px ${inc.emergency_type?.color_hex || '#a855f7'}80` }}></div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <strong className="text-sm" style={{ color: inc.emergency_type?.color_hex || '#e5e7eb' }}>
-                            {inc.emergency_type?.emoji_icon} {inc.emergency_type?.name || 'Emergency'}
-                          </strong>
-                          <span className="text-[10px] text-gray-500 uppercase">{inc.incident_id}</span>
+                <div className="flex flex-col h-full gap-3">
+                  <div className="flex flex-col gap-3 flex-1">
+                    {activeIncidents.length === 0 ? (
+                      <div className="text-center text-xs text-gray-500 mt-10">No active incidents</div>
+                    ) : (
+                      activeIncidents.map(inc => (
+                        <div key={inc.id || inc.incident_id} className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-colors">
+                          <div className="flex items-start gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: inc.emergency_type?.color_hex || '#a855f7', boxShadow: `0 0 8px ${inc.emergency_type?.color_hex || '#a855f7'}80` }}></div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <strong className="text-sm" style={{ color: inc.emergency_type?.color_hex || '#e5e7eb' }}>
+                                  {inc.emergency_type?.emoji_icon} {inc.emergency_type?.name || 'Emergency'}
+                                </strong>
+                                <span className="text-[10px] text-gray-500 uppercase">{inc.incident_id}</span>
+                              </div>
+                              <div className="text-[11px] text-gray-400 mt-1">
+                                📍 {inc.location?.location || inc.location?.barangay || 'Unknown location'}
+                              </div>
+                              <div className="text-[11px] text-gray-400 mt-0.5">
+                                👤 {inc.user?.first_name || inc.caller_name || 'Unknown'} - {inc.user?.phone_number || inc.caller_number || 'No contact'}
+                              </div>
+                              <div className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                                🕒 {new Date(inc.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-3">
+                            <span className="bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase shadow-[0_0_8px_rgba(239,68,68,0.2)]">
+                              Active
+                            </span>
+                            <button className="w-6 h-6 rounded-full bg-white/10 border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-colors text-xs">
+                              ↓
+                            </button>
+                          </div>
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-1">
-                          📍 {inc.location?.location || inc.location?.barangay || 'Unknown location'}
-                        </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">
-                          👤 {inc.user?.first_name || inc.caller_name || 'Unknown'} - {inc.user?.phone_number || inc.caller_number || 'No contact'}
-                        </div>
-                        <div className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
-                          🕒 {new Date(inc.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-3">
-                      <span className="bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase shadow-[0_0_8px_rgba(239,68,68,0.2)]">
-                        Active
+                      ))
+                    )}
+                  </div>
+                  {/* Pagination Controls */}
+                  {lastIncidentPage > 1 && (
+                    <div className="flex items-center justify-between mt-auto pt-2 pb-2 shrink-0 border-t border-[#1f1f26]">
+                      <button 
+                        onClick={() => setIncidentPage(p => Math.max(1, p - 1))}
+                        disabled={currentIncidentPage === 1 || isFetching}
+                        className="px-3 py-1.5 bg-[#1a1a2e] border border-white/10 text-white text-[11px] font-bold rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
+                        {isFetching ? 'Loading...' : `Page ${currentIncidentPage} of ${lastIncidentPage}`}
                       </span>
-                      <button className="w-6 h-6 rounded-full bg-white/10 border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-colors text-xs">
-                        ↓
+                      <button 
+                        onClick={() => setIncidentPage(p => Math.min(lastIncidentPage, p + 1))}
+                        disabled={currentIncidentPage === lastIncidentPage || isFetching}
+                        className="px-3 py-1.5 bg-[#1a1a2e] border border-white/10 text-white text-[11px] font-bold rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
                       </button>
                     </div>
-                  </div>
-                ))
-              )
-            ) : (
+                  )}
+                </div>
+              ) : (
                 Object.keys(responders).length === 0 ? (
                   <div className="text-center text-xs text-gray-500 mt-10">No active responders</div>
                 ) : (

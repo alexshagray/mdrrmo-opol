@@ -11,7 +11,7 @@ const TabIcon = ({ focused, name, outlineName, color }: { focused: boolean, name
     {focused && (
       <View style={{ 
         position: 'absolute', 
-        top: -12, // Moves the line to the very top edge of the tab bar
+        top: -8, // Moves the line to the very top edge of the tab bar
         width: 36, 
         height: 3, 
         backgroundColor: color, 
@@ -93,12 +93,12 @@ export default function TabsLayout() {
         tabBarActiveTintColor: '#0a84ff', // Keeping your existing primary color
         tabBarInactiveTintColor: '#8e8e93',
         tabBarStyle: {
-          backgroundColor: '#16161a', // Keeping your dark theme
-          borderTopColor: '#2d2d34',
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 90 : 75,
-          paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-          paddingTop: 12,
+          backgroundColor: '#000000', 
+          borderTopColor: '#000000',
+          borderTopWidth: 0,
+          height: Platform.OS === 'ios' ? 80 : 95,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 36,
+          paddingTop: 8,
         },
         tabBarLabelStyle: {
           fontSize: 11,

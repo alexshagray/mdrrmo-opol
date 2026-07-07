@@ -180,9 +180,25 @@ export default function LiveMonitoring({ responders }) {
   
   const responderBearings = useRef({});
 
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [typeSearch, setTypeSearch] = useState('');
 
+  const [activeLocationFilters, setActiveLocationFilters] = useState([]);
+  const [locationSearch, setLocationSearch] = useState('');
+
+  const [activeZoneFilters, setActiveZoneFilters] = useState([]);
+  const [zoneSearch, setZoneSearch] = useState('');
+
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
+  const [showMapMarkers, setShowMapMarkers] = useState(() => {
+    const saved = localStorage.getItem('mdrrmo_show_map_markers');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mdrrmo_show_map_markers', JSON.stringify(showMapMarkers));
+  }, [showMapMarkers]);
   const { data: emergencyTypesData } = useQuery({
     queryKey: ['emergencyTypes'],
     queryFn: async () => {
@@ -224,13 +240,58 @@ export default function LiveMonitoring({ responders }) {
   const dispatchReports = dispatchReportsData || [];
 
   const emergencyTypes = emergencyTypesData || [];
+  
+  const getLocationName = (locObj) => {
+    if (!locObj) return "Unknown";
+    if (typeof locObj === 'string') return locObj;
+    return locObj.barangay || locObj.location || locObj.name || "Unknown";
+  };
+
+  const getZoneName = (inc) => {
+    if (inc.purok) return String(inc.purok);
+    if (inc.zone) return String(inc.zone);
+    if (inc.location && typeof inc.location === 'object') {
+      return inc.location.purok || inc.location.zone || "Unknown";
+    }
+    return "Unknown";
+  };
+
+  const uniqueLocations = useMemo(() => {
+    const locs = mapIncidents.map(inc => getLocationName(inc.location)).filter(loc => loc !== "Unknown");
+    return [...new Set(locs)].sort();
+  }, [mapIncidents]);
+
+  const uniqueZones = useMemo(() => {
+    const zones = mapIncidents.map(inc => getZoneName(inc)).filter(z => z !== "Unknown");
+    return [...new Set(zones)].sort();
+  }, [mapIncidents]);
+
+  const filteredLocations = useMemo(() => {
+    return uniqueLocations.filter(loc => 
+      String(loc).toLowerCase().includes(locationSearch.toLowerCase())
+    );
+  }, [uniqueLocations, locationSearch]);
+
+  const filteredZones = useMemo(() => {
+    return uniqueZones.filter(z => 
+      String(z).toLowerCase().includes(zoneSearch.toLowerCase())
+    );
+  }, [uniqueZones, zoneSearch]);
+  
+  const filteredEmergencyTypes = useMemo(() => {
+    return emergencyTypes.filter(type => 
+      type.name.toLowerCase().includes(typeSearch.toLowerCase())
+    );
+  }, [emergencyTypes, typeSearch]);
 
   const filteredMapIncidents = useMemo(() => {
     return mapIncidents.filter(inc => {
-      if (activeFilter !== 'All' && inc.emergency_type?.name !== activeFilter) return false;
+      if (activeFilters.length > 0 && !activeFilters.includes(inc.emergency_type?.name)) return false;
+      if (activeLocationFilters.length > 0 && !activeLocationFilters.includes(getLocationName(inc.location))) return false;
+      if (activeZoneFilters.length > 0 && !activeZoneFilters.includes(getZoneName(inc))) return false;
       return true;
     });
-  }, [mapIncidents, activeFilter]);
+  }, [mapIncidents, activeFilters, activeLocationFilters, activeZoneFilters]);
 
   const clusteredIncidents = useMemo(() => {
     const clusters = {};
@@ -249,7 +310,7 @@ export default function LiveMonitoring({ responders }) {
             title: inc.emergency_type?.name || "Emergency Incident",
             emoji: inc.emergency_type?.emoji_icon || '⚠️',
             color: inc.emergency_type?.color_hex || '#ef4444',
-            barangay: inc.location || "Unknown",
+            barangay: getLocationName(inc.location),
             status: inc.status || "active",
             reportedAt: inc.created_at || "Recently",
             latestIncident: inc
@@ -268,53 +329,83 @@ export default function LiveMonitoring({ responders }) {
 
 
 
-  return (
-    <div className="relative w-full h-full flex flex-col gap-4">
-      {/* Filters Toolbar - Outside the Map */}
-      <div className="w-full flex justify-between items-center z-[105] bg-[#111116]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg">
-        <div className="flex gap-4 items-center w-full flex-wrap">
-          
-          {/* Type Dropdown Filter */}
-          <div className="relative">
-            <button 
-              onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
-              className="flex items-center gap-3 px-6 py-2 bg-[#1a1a2e] border border-white/10 rounded-full shadow-inner text-white text-sm font-bold transition-all hover:bg-white/10"
-            >
-              <span className="text-lg">
-                {activeFilter === 'All' ? '🌍' : emergencyTypes.find(t => t.name === activeFilter)?.emoji_icon || '⚠️'}
-              </span>
-              {activeFilter === 'All' ? 'All Emergency Types' : activeFilter}
-              <span className={`text-[#8e8e93] text-xs ml-2 transition-transform duration-300 ${typeDropdownOpen ? 'rotate-180' : ''}`}>▼</span>
-            </button>
-            
-            {typeDropdownOpen && (
-              <div className="absolute top-[110%] left-0 w-72 max-h-[50vh] overflow-y-auto bg-[#111116] border border-white/10 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.7)] p-2 custom-scrollbar z-[200] flex flex-col gap-1">
-                <button
-                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeFilter === 'All' ? 'bg-[#3b82f6] text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
-                  onClick={() => { setActiveFilter('All'); setTypeDropdownOpen(false); }}
-                >
-                  <span className="text-lg">🌍</span> All Emergency Types
-                </button>
-                {emergencyTypes.map(type => (
-                  <button
-                    key={type.id}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeFilter === type.name ? 'text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
-                    style={activeFilter === type.name ? { backgroundColor: type.color_hex } : {}}
-                    onClick={() => { setActiveFilter(type.name); setTypeDropdownOpen(false); }}
-                  >
-                    <span className="text-lg">{type.emoji_icon}</span> {type.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+  const toggleFilter = (typeName) => {
+    if (activeFilters.includes(typeName)) {
+      setActiveFilters(activeFilters.filter(name => name !== typeName));
+    } else {
+      setActiveFilters([...activeFilters, typeName]);
+    }
+  };
 
-        </div>
+  const toggleLocationFilter = (locName) => {
+    if (activeLocationFilters.includes(locName)) {
+      setActiveLocationFilters(activeLocationFilters.filter(name => name !== locName));
+    } else {
+      setActiveLocationFilters([...activeLocationFilters, locName]);
+    }
+  };
+
+  const toggleZoneFilter = (zoneName) => {
+    if (activeZoneFilters.includes(zoneName)) {
+      setActiveZoneFilters(activeZoneFilters.filter(name => name !== zoneName));
+    } else {
+      setActiveZoneFilters([...activeZoneFilters, zoneName]);
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full flex flex-col relative">
+      {/* Filters Toolbar - Floating Over the Map */}
+      <div className={`absolute top-4 left-4 z-[105] flex gap-2 items-center bg-[#111116]/90 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] transition-all overflow-hidden ${isToolbarExpanded ? 'p-2' : 'p-1.5'}`}>
+        {isToolbarExpanded ? (
+          <>
+            <button 
+              onClick={() => setIsToolbarExpanded(false)}
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              title="Minimize Toolbar"
+            >
+              <span className="text-[10px]">◀</span>
+            </button>
+
+            {/* Toggle Map Markers */}
+            <button 
+              onClick={() => setShowMapMarkers(!showMapMarkers)}
+              className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 rounded-full text-xs font-bold transition-all ${showMapMarkers ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-[#ef4444]/20 border border-[#ef4444]/50 hover:bg-[#ef4444]/30 text-[#ef4444]'}`}
+              title={showMapMarkers ? 'Hide Incident Markers' : 'Show Incident Markers'}
+            >
+              <span className="text-sm">{showMapMarkers ? '👁️' : '🚫'}</span>
+              <span className="hidden md:inline">{showMapMarkers ? 'Hide Incidents' : 'Show Incidents'}</span>
+            </button>
+
+            {/* Main Filters Button */}
+            <button 
+              onClick={() => setIsFilterModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 bg-[#3b82f6] rounded-full text-white text-xs font-bold transition-all hover:bg-[#2563eb]"
+            >
+              <span className="text-sm">⚙️</span>
+              Filters 
+              {activeFilters.length + activeLocationFilters.length + activeZoneFilters.length > 0 && 
+                <span className="ml-1 px-1.5 py-0.5 bg-white text-[#3b82f6] rounded-full text-[10px] font-black">
+                  {activeFilters.length + activeLocationFilters.length + activeZoneFilters.length}
+                </span>
+              }
+            </button>
+          </>
+        ) : (
+          <button 
+            onClick={() => setIsToolbarExpanded(true)}
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Expand Toolbar"
+          >
+            <span className="text-sm">⚙️</span>
+          </button>
+        )}
       </div>
 
       <div className="flex-1 w-full rounded-2xl overflow-hidden border border-white/10 cursor-grab relative">
         <Map
           mapboxAccessToken={MAPBOX_TOKEN}
+          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, width: '100%', height: '100%' }}
           initialViewState={{
             longitude: 124.5772,
             latitude: 8.5204,
@@ -408,7 +499,7 @@ export default function LiveMonitoring({ responders }) {
 
 
           {/* Render Automatic Incident Clusters */}
-          {clusteredIncidents.map((cluster) => {
+          {showMapMarkers && clusteredIncidents.map((cluster) => {
             const [lat, lng] = cluster.coords;
             const isCompleted = cluster.status === 'completed';
             return (
@@ -656,6 +747,163 @@ export default function LiveMonitoring({ responders }) {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Modal */}
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+          <div className="bg-[#111116] border border-white/10 rounded-2xl w-full max-w-5xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-6 py-4 border-b border-white/10 bg-white/5">
+              <h3 className="m-0 text-white text-lg font-bold flex items-center gap-2">
+                <span className="text-xl">⚙️</span> Filters
+              </h3>
+              <div className="flex gap-4 items-center">
+                <button 
+                  onClick={() => {
+                    setActiveFilters([]);
+                    setActiveLocationFilters([]);
+                    setActiveZoneFilters([]);
+                  }}
+                  className="text-[#8e8e93] hover:text-white text-sm font-bold transition-colors underline"
+                >
+                  Clear All
+                </button>
+                <button 
+                  onClick={() => setIsFilterModalOpen(false)}
+                  className="text-gray-400 hover:text-white text-2xl leading-none transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body - 3 Columns */}
+            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar flex-1">
+              
+              {/* Column 1: Emergency Types */}
+              <div className="flex flex-col gap-3">
+                <h4 className="text-white text-sm font-bold flex items-center gap-2 m-0">
+                  <span>🌍</span> Emergency Types
+                </h4>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search type..."
+                    value={typeSearch}
+                    onChange={(e) => setTypeSearch(e.target.value)}
+                    className="w-full bg-[#1a1a2e] border border-white/10 text-white text-sm rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 overflow-y-auto max-h-[40vh] custom-scrollbar pr-2">
+                  <button
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeFilters.length === 0 ? 'bg-[#3b82f6] text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                    onClick={() => setActiveFilters([])}
+                  >
+                    <span className="text-lg">🌍</span> All Types
+                    {activeFilters.length === 0 && <span className="ml-auto">✔️</span>}
+                  </button>
+                  {filteredEmergencyTypes.map(type => (
+                    <button
+                      key={type.id}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeFilters.includes(type.name) ? 'bg-[#3b82f6]/20 border border-[#3b82f6]/30 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                      onClick={() => toggleFilter(type.name)}
+                    >
+                      <span className="text-lg">{type.emoji_icon}</span> {type.name}
+                      {activeFilters.includes(type.name) && <span className="ml-auto text-[#3b82f6]">✔️</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Column 2: Locations (Barangay) */}
+              <div className="flex flex-col gap-3">
+                <h4 className="text-white text-sm font-bold flex items-center gap-2 m-0">
+                  <span>📍</span> Locations
+                </h4>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search location..."
+                    value={locationSearch}
+                    onChange={(e) => setLocationSearch(e.target.value)}
+                    className="w-full bg-[#1a1a2e] border border-white/10 text-white text-sm rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 overflow-y-auto max-h-[40vh] custom-scrollbar pr-2">
+                  <button
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeLocationFilters.length === 0 ? 'bg-[#3b82f6] text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                    onClick={() => setActiveLocationFilters([])}
+                  >
+                    <span className="text-lg">📍</span> All Locations
+                    {activeLocationFilters.length === 0 && <span className="ml-auto">✔️</span>}
+                  </button>
+                  {filteredLocations.map(loc => (
+                    <button
+                      key={loc}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeLocationFilters.includes(loc) ? 'bg-[#3b82f6]/20 border border-[#3b82f6]/30 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                      onClick={() => toggleLocationFilter(loc)}
+                    >
+                      <span className="text-lg">📌</span> {loc}
+                      {activeLocationFilters.includes(loc) && <span className="ml-auto text-[#3b82f6]">✔️</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Column 3: Zones / Purok */}
+              <div className="flex flex-col gap-3">
+                <h4 className="text-white text-sm font-bold flex items-center gap-2 m-0">
+                  <span>🏠</span> Zones / Purok
+                </h4>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search zone..."
+                    value={zoneSearch}
+                    onChange={(e) => setZoneSearch(e.target.value)}
+                    className="w-full bg-[#1a1a2e] border border-white/10 text-white text-sm rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 overflow-y-auto max-h-[40vh] custom-scrollbar pr-2">
+                  <button
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeZoneFilters.length === 0 ? 'bg-[#3b82f6] text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                    onClick={() => setActiveZoneFilters([])}
+                  >
+                    <span className="text-lg">🏠</span> All Zones
+                    {activeZoneFilters.length === 0 && <span className="ml-auto">✔️</span>}
+                  </button>
+                  {filteredZones.map(zone => (
+                    <button
+                      key={zone}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeZoneFilters.includes(zone) ? 'bg-[#3b82f6]/20 border border-[#3b82f6]/30 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                      onClick={() => toggleZoneFilter(zone)}
+                    >
+                      <span className="text-lg">🏘️</span> {zone}
+                      {activeZoneFilters.includes(zone) && <span className="ml-auto text-[#3b82f6]">✔️</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 bg-white/5 flex justify-end">
+              <button 
+                onClick={() => setIsFilterModalOpen(false)}
+                className="px-6 py-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-xl font-bold transition-colors"
+              >
+                Apply Filters
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -10,9 +10,15 @@ use Illuminate\Support\Facades\Http;
 
 class IncidentReportController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $incidents = IncidentReport::with('user')->latest()->paginate(10);
+        $query = IncidentReport::with('user')->latest();
+        
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+        
+        $incidents = $query->paginate(10);
         return response()->json($incidents);
     }
 

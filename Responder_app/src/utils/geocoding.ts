@@ -211,3 +211,29 @@ export const robustGeocode = async (
 
   return null;
 };
+
+/**
+ * Reverse geocodes coordinates to a readable address using Mapbox
+ */
+export const reverseGeocode = async (latitude: number, longitude: number): Promise<string | null> => {
+  const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || DEFAULT_MAPBOX_TOKEN;
+  // Note: Mapbox expects longitude,latitude in the URL path
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${token}&limit=1`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Mapbox API error: ${response.status}`);
+    }
+    const data = await response.json();
+    
+    if (data.features && data.features.length > 0) {
+      // Mapbox returns a full place_name, e.g., "Street Name, City, Country"
+      return data.features[0].place_name;
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Mapbox reverse geocoding failed for: ${latitude},${longitude}`, error);
+    return null;
+  }
+};

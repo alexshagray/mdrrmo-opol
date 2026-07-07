@@ -26,6 +26,7 @@ export default function PCRScreen() {
   const callerInfo = params.callerInfo ? JSON.parse(params.callerInfo as string) : null;
   const emergencyTypeParam = params.emergencyType as string || '';
   const accidentAddress = params.accidentAddress as string || '';
+  const actualIncidentAddress = params.actualIncidentAddress as string || '';
   
   // Tracking Times (assuming passed from tracking map)
   const dispatchTimeParam = params.dispatchTime as string || '';
@@ -55,7 +56,7 @@ export default function PCRScreen() {
   const civilStatusOptions = ['Single', 'Married', 'Widowed', 'Child', 'Separated'];
 
   const [patientAddress, setPatientAddress] = useState(accidentAddress);
-  const [placeOfIncident, setPlaceOfIncident] = useState(accidentAddress);
+  const [placeOfIncident, setPlaceOfIncident] = useState(actualIncidentAddress || accidentAddress);
   const [chiefComplaint, setChiefComplaint] = useState(emergencyTypeParam || '');
   const [natureOfCall, setNatureOfCall] = useState('');
   const [showNatureOfCallDropdown, setShowNatureOfCallDropdown] = useState(false);
@@ -1132,9 +1133,13 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: '600',
   },
-  readOnly: {
-    backgroundColor: '#1f1f26',
-    color: '#8e8e93',
+  dropdownBox: {
+    backgroundColor: '#111115',
+    borderWidth: 1,
+    borderColor: '#1f1f26',
+    borderRadius: 12,
+    marginTop: 8,
+    paddingVertical: 8,
   },
   dispOption: {
     flexDirection: 'row',

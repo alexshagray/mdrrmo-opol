@@ -29,7 +29,7 @@ import { getSocket, initializeSocket, setTrackingActive } from '@/services/socke
 
 import MapboxMap from '@/components/MapboxMap';
 import { MaterialIcons } from '@expo/vector-icons';
-import { robustGeocode } from '@/utils/geocoding';
+import { robustGeocode, reverseGeocode } from '@/utils/geocoding';
 
 interface Coordinate {
   latitude: number;
@@ -754,11 +754,11 @@ export default function TrackingScreen() {
                 style={[
                   styles.submitButton, 
                   { 
-                    backgroundColor: distanceToIncident !== null && distanceToIncident <= 300 ? '#ff453a' : '#555', 
-                    shadowColor: distanceToIncident !== null && distanceToIncident <= 300 ? '#ff453a' : 'transparent' 
+                    backgroundColor: distanceToIncident !== null && distanceToIncident <= 1609 ? '#ff453a' : '#555', 
+                    shadowColor: distanceToIncident !== null && distanceToIncident <= 1609 ? '#ff453a' : 'transparent' 
                   }
                 ]}
-                disabled={distanceToIncident === null || distanceToIncident > 300}
+                disabled={distanceToIncident === null || distanceToIncident > 1609}
                 onPress={() => {
                   Alert.alert(
                     "Confirm Arrival",
@@ -767,7 +767,7 @@ export default function TrackingScreen() {
                       { text: "Cancel", style: "cancel" },
                       { 
                         text: "Yes, Arrived", 
-                        onPress: () => {
+                        onPress: async () => {
                           setIncidentStatus('On Scene');
                           FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'onSceneTime.txt', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })).catch(() => {});
                           setIsRespondingRoute(false);
@@ -776,11 +776,21 @@ export default function TrackingScreen() {
                           speakGuidance('You have successfully arrived at the scene.');
                           Speech.stop();
                           setIsActiveCall(false);
+
+                          let actualLocationName = '';
+                          if (responderLocation) {
+                            const name = await reverseGeocode(responderLocation.latitude, responderLocation.longitude);
+                            if (name) actualLocationName = name;
+                          }
+
                           router.push({
                             pathname: '/(tabs)/pcr',
                             params: {
                               callerInfo: JSON.stringify(callerInfo),
                               accidentAddress: accidentAddress,
+                              actualIncidentAddress: actualLocationName,
+                              actualArrivalLat: responderLocation?.latitude?.toString() || '',
+                              actualArrivalLng: responderLocation?.longitude?.toString() || '',
                               emergencyType: emergencyType,
                               barangay: barangay,
                               purok: purok,
