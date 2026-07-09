@@ -10,7 +10,7 @@ class PostEventController extends Controller
 {
     public function index()
     {
-        return response()->json(PostEvent::orderBy('event_date', 'asc')->get());
+        return response()->json(PostEvent::with('creator')->orderBy('event_date', 'asc')->get());
     }
 
     public function store(Request $request)
@@ -25,6 +25,8 @@ class PostEventController extends Controller
             'end_time' => 'nullable|date_format:H:i',
             'status' => 'sometimes|string',
         ]);
+
+        $validated['user_id'] = auth()->id() ?? 1; // Fallback to System Admin if not fully authed via API
 
         $event = PostEvent::create($validated);
 

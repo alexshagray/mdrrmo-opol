@@ -47,6 +47,16 @@ class User extends Authenticatable
         ];
     }
 
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(IncidentDetail::class);
+    }
+
+    public function postEvents(): HasMany
+    {
+        return $this->hasMany(PostEvent::class, 'user_id');
+    }
+
     public function reports()
     {
         return $this->hasMany(Report::class);

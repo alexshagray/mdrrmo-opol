@@ -11,7 +11,7 @@ class ResponderLog extends Model
 
     protected $fillable = [
         'responder_id',
-        'incident_id',
+        'incident_detail_id',
         'latitude',
         'longitude',
         'status',
@@ -27,5 +27,17 @@ class ResponderLog extends Model
     public function responder()
     {
         return $this->belongsTo(User::class, 'responder_id');
+    }
+
+    public function incidentDetail()
+    {
+        return $this->belongsTo(IncidentDetail::class, 'incident_detail_id');
+    }
+
+    protected $appends = ['incident_id'];
+
+    public function getIncidentIdAttribute()
+    {
+        return $this->incidentDetail ? $this->incidentDetail->incident_id : null;
     }
 }

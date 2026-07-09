@@ -136,7 +136,7 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
           type="line"
           paint={{
             'line-color': '#0a84ff',
-            'line-width': 4,
+            'line-width': 8,
             'line-dasharray': [2, 2]
           }}
         />
@@ -155,7 +155,7 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
         type="line"
         paint={{
           'line-color': '#ffffff',
-          'line-width': 8,
+          'line-width': 14,
           'line-opacity': 1
         }}
       />
@@ -164,7 +164,7 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
         type="line"
         paint={{
           'line-color': '#0a84ff',
-          'line-width': 4,
+          'line-width': 8,
           'line-opacity': 1
         }}
       />
@@ -173,7 +173,8 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
 };
 
 
-export default function LiveMonitoring({ responders }) {
+export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
+  const mapRef = useRef(null);
   const [selectedMapIncident, setSelectedMapIncident] = useState(null);
   const [selectedResponder, setSelectedResponder] = useState(null);
   const [selectedDispatch, setSelectedDispatch] = useState(null);
@@ -213,7 +214,8 @@ export default function LiveMonitoring({ responders }) {
     queryFn: async () => {
       const response = await fetch('/api/map/incidents');
       return response.json();
-    }
+    },
+    refetchInterval: 3000
   });
 
 
@@ -223,13 +225,23 @@ export default function LiveMonitoring({ responders }) {
     queryFn: async () => {
       const response = await fetch(`/api/incidents?page=1`);
       return response.json();
-    }
+    },
+    refetchInterval: 3000
   });
 
   const { data: responderLogsData } = useQuery({
     queryKey: ['responderLogs'],
     queryFn: async () => {
       const response = await fetch('/api/responder_logs');
+      return response.json();
+    },
+    refetchInterval: 3000
+  });
+
+  const { data: barangaysData } = useQuery({
+    queryKey: ['barangays'],
+    queryFn: async () => {
+      const response = await fetch('/api/barangays');
       return response.json();
     }
   });
@@ -238,9 +250,20 @@ export default function LiveMonitoring({ responders }) {
   const incidents = incidentsData?.data || [];
 
   const responderLogs = responderLogsData || [];
-
   const emergencyTypes = emergencyTypesData || [];
+  const barangays = barangaysData || [];
   
+  const barangayBoundariesGeoJSON = useMemo(() => {
+    return {
+      type: 'FeatureCollection',
+      features: barangays.filter(b => b.boundary_polygon).map(b => ({
+        type: 'Feature',
+        properties: { name: b.barangay_name },
+        geometry: typeof b.boundary_polygon === 'string' ? JSON.parse(b.boundary_polygon) : b.boundary_polygon
+      }))
+    };
+  }, [barangays]);
+
   const getLocationName = (locObj) => {
     if (!locObj) return "Unknown";
     if (typeof locObj === 'string') return locObj;
@@ -286,6 +309,10 @@ export default function LiveMonitoring({ responders }) {
 
   const filteredMapIncidents = useMemo(() => {
     return mapIncidents.filter(inc => {
+      // Exclude cancelled and rejected incidents
+      const status = (inc.status || '').toLowerCase();
+      if (['cancelled', 'rejected', 'declined'].includes(status)) return false;
+
       if (activeFilters.length > 0 && !activeFilters.includes(inc.emergency_type?.name)) return false;
       if (activeLocationFilters.length > 0 && !activeLocationFilters.includes(getLocationName(inc.location))) return false;
       if (activeZoneFilters.length > 0 && !activeZoneFilters.includes(getZoneName(inc))) return false;
@@ -296,8 +323,14 @@ export default function LiveMonitoring({ responders }) {
   const clusteredIncidents = useMemo(() => {
     const clusters = {};
     filteredMapIncidents.forEach(inc => {
-      const lat = parseFloat(inc.latitude);
-      const lng = parseFloat(inc.longitude);
+      let lat = parseFloat(inc.latitude);
+      let lng = parseFloat(inc.longitude);
+
+      // Fallback: check nested location relation if direct coords are missing
+      if ((isNaN(lat) || lat === 0) && inc.location) {
+        lat = parseFloat(inc.location.latitude);
+        lng = parseFloat(inc.location.longitude);
+      }
 
       if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
         const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
@@ -326,6 +359,44 @@ export default function LiveMonitoring({ responders }) {
     });
     return Object.values(clusters);
   }, [filteredMapIncidents]);
+
+  useEffect(() => {
+    if (selectedIncidentForMap && mapRef.current) {
+      console.log('Selected Incident for Map:', selectedIncidentForMap);
+      
+      let lat = parseFloat(selectedIncidentForMap.latitude);
+      let lng = parseFloat(selectedIncidentForMap.longitude);
+      
+      // Fallback if coordinates are nested
+      if (isNaN(lat) && selectedIncidentForMap.location) {
+        lat = parseFloat(selectedIncidentForMap.location.latitude);
+        lng = parseFloat(selectedIncidentForMap.location.longitude);
+      }
+      
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        try {
+          if (mapRef.current.flyTo) {
+            mapRef.current.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
+          } else if (mapRef.current.getMap) {
+            mapRef.current.getMap().flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
+          }
+        } catch (e) {
+          console.warn('Map flyTo failed:', e);
+        }
+
+        // Find the corresponding cluster and open its popup
+        const targetCluster = clusteredIncidents.find(cluster => 
+          cluster.incidentsList.some(inc => (inc.id === selectedIncidentForMap.id || inc.incident_id === selectedIncidentForMap.incident_id))
+        );
+        
+        if (targetCluster) {
+          setSelectedMapIncident(targetCluster);
+        }
+      } else {
+        console.warn('No valid coordinates found for incident:', selectedIncidentForMap.incident_id);
+      }
+    }
+  }, [selectedIncidentForMap, clusteredIncidents]);
 
 
 
@@ -404,6 +475,7 @@ export default function LiveMonitoring({ responders }) {
 
       <div className="flex-1 w-full rounded-2xl overflow-hidden border border-white/10 cursor-grab relative">
         <Map
+          ref={mapRef}
           mapboxAccessToken={MAPBOX_TOKEN}
           style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, width: '100%', height: '100%' }}
           initialViewState={{
@@ -450,6 +522,36 @@ export default function LiveMonitoring({ responders }) {
                 'text-color': '#ffffff',
                 'text-halo-color': '#000000',
                 'text-halo-width': 1.5
+              }}
+            />
+          </Source>
+
+          {/* Dynamic Barangay Boundaries */}
+          <Source id="barangay-boundaries" type="geojson" data={barangayBoundariesGeoJSON}>
+            <Layer
+              id="barangay-boundaries-line"
+              type="line"
+              paint={{
+                'line-color': '#0a84ff',
+                'line-width': ['case', 
+                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 4, 
+                  1
+                ],
+                'line-opacity': ['case', 
+                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 1, 
+                  0.15
+                ]
+              }}
+            />
+            <Layer
+              id="barangay-boundaries-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#0a84ff',
+                'fill-opacity': ['case', 
+                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 0.15, 
+                  0
+                ]
               }}
             />
           </Source>
@@ -524,6 +626,8 @@ export default function LiveMonitoring({ responders }) {
           {Object.values(responders).map((resp) => {
             const isRecent = new Date() - new Date(resp.updatedAt) < 120000; // 2 minutes (120000ms)
             if (!isRecent) return null;
+            
+            if ((resp.status || '').toLowerCase() === 'offline') return null;
 
             const respLat = parseFloat(resp.latitude);
             const respLng = parseFloat(resp.longitude);

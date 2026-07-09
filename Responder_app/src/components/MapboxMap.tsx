@@ -13,6 +13,8 @@ interface MapboxMapProps {
   incidentLocation: Coordinate | null;
   isResponding?: boolean;
   isOffRoute?: boolean;
+  isFirstPersonView?: boolean;
+  boundaryPolygon?: any;
   onRouteUpdate?: (data: {
     totalDistance: number;
     coordinates: Coordinate[];
@@ -26,6 +28,8 @@ export default function MapboxMap({
   incidentLocation,
   isResponding = false,
   isOffRoute = false,
+  isFirstPersonView = false,
+  boundaryPolygon,
   onRouteUpdate,
 }: MapboxMapProps) {
   const webViewRef = useRef<WebView>(null);
@@ -42,11 +46,13 @@ export default function MapboxMap({
         incidentLocation,
         isResponding,
         isOffRoute,
+        isFirstPersonView,
+        boundaryPolygon,
         ambulanceIconUri,
       };
       webViewRef.current.postMessage(JSON.stringify(data));
     }
-  }, [responderLocation, callerLocation, incidentLocation, isResponding, ambulanceIconUri]);
+  }, [responderLocation, callerLocation, incidentLocation, isResponding, isFirstPersonView, boundaryPolygon, ambulanceIconUri]);
 
   const mapboxHtml = `
     <!DOCTYPE html>
@@ -93,6 +99,13 @@ export default function MapboxMap({
         let incidentMarker = null;
         let previousResponderLngLat = null;
         let currentBearing = 0;
+        let latestRouteCoords = [];
+        
+        let markerAnimationId = null;
+        let markerCurrentLngLat = null;
+        let markerCurrentRot = 0;
+        let markerTargetLngLat = null;
+        let markerTargetRot = 0;
 
         function calculateBearing(start, end) {
             const startLat = start[1] * Math.PI / 180;
@@ -134,8 +147,13 @@ export default function MapboxMap({
         }
 
         function createImageMarkerElement(imageUrl) {
+            const container = document.createElement('div');
+            container.style.width = '0px';
+            container.style.height = '0px';
+            container.style.position = 'relative';
+
             const el = document.createElement('div');
-            el.className = 'custom-marker';
+            el.className = 'custom-marker responder-icon';
             el.style.backgroundColor = 'transparent';
             el.style.border = 'none';
             el.style.boxShadow = 'none';
@@ -143,10 +161,18 @@ export default function MapboxMap({
             el.style.backgroundSize = 'contain';
             el.style.backgroundRepeat = 'no-repeat';
             el.style.backgroundPosition = 'center';
-            el.style.width = '54px';
-            el.style.height = '54px';
+            el.style.position = 'absolute';
+            
+            // Set initial size
+            const initialSize = 54;
+            el.style.width = initialSize + 'px';
+            el.style.height = initialSize + 'px';
+            el.style.top = -(initialSize/2) + 'px';
+            el.style.left = -(initialSize/2) + 'px';
             el.style.filter = 'drop-shadow(0px 8px 10px rgba(0,0,0,0.5))';
-            return el;
+            
+            container.appendChild(el);
+            return container;
         }
 
         map.on('load', () => {
@@ -284,7 +310,6 @@ export default function MapboxMap({
         window.lastIncidentLoc = null;
         window.hasRoute = false;
         window.lastClosestIndex = 0;
-        let latestRouteCoords = [];
 
         async function getRoute(start, end) {
             try {
@@ -366,6 +391,8 @@ export default function MapboxMap({
                 const rotationAngle = currentBearing - 135;
                 
                 if (!responderMarker) {
+                    markerCurrentLngLat = lngLat;
+                    markerCurrentRot = rotationAngle;
                     responderMarker = new mapboxgl.Marker({ 
                             element: createImageMarkerElement(data.ambulanceIconUri || ''),
                             rotationAlignment: 'map'
@@ -374,12 +401,67 @@ export default function MapboxMap({
                         .setRotation(rotationAngle)
                         .addTo(map);
                 } else {
-                    responderMarker.setLngLat(lngLat);
-                    responderMarker.setRotation(rotationAngle);
+                    markerTargetLngLat = lngLat;
+                    markerTargetRot = rotationAngle;
+                    
+                    if (markerAnimationId) cancelAnimationFrame(markerAnimationId);
+                    
+                    let startTimestamp = null;
+                    const duration = 1000;
+                    const startLngLat = [...markerCurrentLngLat];
+                    const startRot = markerCurrentRot;
+                    
+                    // Handle shortest path rotation wrapping
+                    let deltaRot = markerTargetRot - startRot;
+                    if (deltaRot > 180) deltaRot -= 360;
+                    if (deltaRot < -180) deltaRot += 360;
+                    
+                    const animateMarker = (timestamp) => {
+                        if (!startTimestamp) startTimestamp = timestamp;
+                        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                        
+                        // Linear interpolation is better for continuous GPS updates
+                        markerCurrentLngLat = [
+                            startLngLat[0] + (markerTargetLngLat[0] - startLngLat[0]) * progress,
+                            startLngLat[1] + (markerTargetLngLat[1] - startLngLat[1]) * progress
+                        ];
+                        markerCurrentRot = startRot + deltaRot * progress;
+                        
+                        responderMarker.setLngLat(markerCurrentLngLat);
+                        responderMarker.setRotation(markerCurrentRot);
+                        
+                        if (progress < 1) {
+                            markerAnimationId = requestAnimationFrame(animateMarker);
+                        }
+                    };
+                    markerAnimationId = requestAnimationFrame(animateMarker);
+
                     if (data.ambulanceIconUri) {
-                        responderMarker.getElement().style.backgroundImage = 'url("' + data.ambulanceIconUri + '")';
+                        const iconEl = responderMarker.getElement().querySelector('.responder-icon');
+                        if (iconEl) {
+                            iconEl.style.backgroundImage = 'url("' + data.ambulanceIconUri + '")';
+                        }
                     }
                 }
+
+                // Handle camera follow (First Person vs Top Down)
+                if (data.isFirstPersonView && !window.userPanned) {
+                    map.flyTo({
+                        center: lngLat,
+                        zoom: 18,
+                        pitch: 60,
+                        bearing: currentBearing,
+                        speed: 1.2
+                    });
+                } else if (window.wasFirstPersonView && !data.isFirstPersonView) {
+                    // Reset to top down if they just toggled it off
+                    map.flyTo({
+                        pitch: 0,
+                        bearing: 0,
+                        zoom: 15
+                    });
+                }
+                window.wasFirstPersonView = data.isFirstPersonView;
 
                 // Visually trim the route behind the ambulance
                 if (latestRouteCoords && latestRouteCoords.length > 0) {
@@ -448,7 +530,7 @@ export default function MapboxMap({
                 hasPoints = true;
                 
                 if (map.getSource('incident-circle')) {
-                    const radiusKm = 0.1; // 100 meters
+                    const radiusKm = data.incidentLocation.radiusKm || 0.1; // Dynamic radius
                     const points = 64;
                     const distanceX = radiusKm / (111.320 * Math.cos(lngLat[1] * Math.PI / 180));
                     const distanceY = radiusKm / 110.574;
@@ -473,13 +555,9 @@ export default function MapboxMap({
                         }]
                     });
                 }
-                
-                if (!incidentMarker) {
-                    incidentMarker = new mapboxgl.Marker({ element: createMarkerElement('⚠️', '#ef4444') })
-                        .setLngLat(lngLat)
-                        .addTo(map);
-                } else {
-                    incidentMarker.setLngLat(lngLat);
+                if (incidentMarker) {
+                    incidentMarker.remove();
+                    incidentMarker = null;
                 }
             } else {
                 if (map.getSource('incident-circle')) {
@@ -499,6 +577,52 @@ export default function MapboxMap({
                 map.fitBounds(bounds, { padding: 50, duration: 1000 });
             }
 
+            // 3. Draw Boundary Polygon (if available)
+            if (data.boundaryPolygon) {
+                if (!map.getSource('barangay-boundary')) {
+                    map.addSource('barangay-boundary', {
+                        'type': 'geojson',
+                        'data': data.boundaryPolygon
+                    });
+
+                    map.addLayer({
+                        'id': 'barangay-boundary-fill',
+                        'type': 'fill',
+                        'source': 'barangay-boundary',
+                        'layout': {},
+                        'paint': {
+                            'fill-color': '#f87171',
+                            'fill-opacity': 0.2
+                        }
+                    });
+
+                    map.addLayer({
+                        'id': 'barangay-boundary-line',
+                        'type': 'line',
+                        'source': 'barangay-boundary',
+                        'layout': {},
+                        'paint': {
+                            'line-color': '#dc2626',
+                            'line-width': 3,
+                            'line-dasharray': [2, 2]
+                        }
+                    });
+
+                    // Automatically fit bounds to the polygon
+                    const polyBounds = new mapboxgl.LngLatBounds();
+                    const coordinates = data.boundaryPolygon.type === 'Polygon' 
+                        ? data.boundaryPolygon.coordinates[0]
+                        : data.boundaryPolygon.coordinates[0][0]; // Simplified for MultiPolygon
+                    
+                    if (coordinates) {
+                        coordinates.forEach(coord => {
+                            polyBounds.extend(coord);
+                        });
+                        map.fitBounds(polyBounds, { padding: 50, duration: 1000 });
+                    }
+                }
+            }
+
             // Routing
             if (data.isResponding && data.responderLocation && data.incidentLocation) {
                 const start = [data.responderLocation.longitude, data.responderLocation.latitude];
@@ -512,9 +636,9 @@ export default function MapboxMap({
                     getRoute(start, end);
                 }
                 
-                // Keep camera centered on responder when routing
-                if (!window.userPanned) {
-                    map.flyTo({ center: start, zoom: 16, pitch: 45 });
+                // Keep camera centered on responder when routing (if not in first person view)
+                if (!window.userPanned && !data.isFirstPersonView) {
+                    map.flyTo({ center: start, zoom: 16, pitch: 0, bearing: 0 });
                 }
             } else {
                 if (map.getSource('route')) {

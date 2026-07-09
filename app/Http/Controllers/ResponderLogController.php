@@ -24,9 +24,17 @@ class ResponderLogController extends Controller
             'status' => 'nullable|in:Assigned,Dispatched,En route,Arrived at scene,Rejected',
         ]);
 
+        $incidentDetailId = null;
+        if ($request->incident_id) {
+            $incidentDetail = \App\Models\IncidentDetail::where('incident_id', $request->incident_id)->first();
+            if ($incidentDetail) {
+                $incidentDetailId = $incidentDetail->id;
+            }
+        }
+
         $responderLog = ResponderLog::create([
             'responder_id' => $request->responder_id,
-            'incident_id' => $request->incident_id,
+            'incident_detail_id' => $incidentDetailId,
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
             'status' => $request->status,

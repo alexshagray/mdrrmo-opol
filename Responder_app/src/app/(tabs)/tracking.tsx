@@ -24,16 +24,45 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CallDetectorModule } from 'expo-call-detector';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
-import { savePatientCareReport, fetchUserProfile } from '@/services/api';
+import { savePatientCareRecord, fetchUserProfile, updateIncidentStatus } from '@/services/api';
 import { getSocket, initializeSocket, setTrackingActive } from '@/services/socket';
 
 import MapboxMap from '@/components/MapboxMap';
 import { MaterialIcons } from '@expo/vector-icons';
 import { robustGeocode, reverseGeocode } from '@/utils/geocoding';
 
+function isPointInPolygon(point: { latitude: number, longitude: number }, geometry: any): boolean {
+  if (!geometry || !geometry.coordinates) return false;
+  
+  const pt = [point.longitude, point.latitude];
+  
+  const isInsidePolygon = (rings: any[]) => {
+    let inside = false;
+    const exteriorRing = rings[0];
+    for (let i = 0, j = exteriorRing.length - 1; i < exteriorRing.length; j = i++) {
+      const xi = exteriorRing[i][0], yi = exteriorRing[i][1];
+      const xj = exteriorRing[j][0], yj = exteriorRing[j][1];
+      const intersect = ((yi > pt[1]) !== (yj > pt[1]))
+          && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  };
+
+  if (geometry.type === 'Polygon') {
+    return isInsidePolygon(geometry.coordinates);
+  } else if (geometry.type === 'MultiPolygon') {
+    for (const polygonRings of geometry.coordinates) {
+      if (isInsidePolygon(polygonRings)) return true;
+    }
+  }
+  return false;
+}
+
 interface Coordinate {
   latitude: number;
   longitude: number;
+  radiusKm?: number;
 }
 
 interface RouteStep {
@@ -88,6 +117,11 @@ export default function TrackingScreen() {
   const purok = (params.purok as string) || '';
   const landmark = (params.landmark as string) || '';
   const callerType = (params.callerType as string) || '';
+  const dbIncidentId = (params.dbIncidentId as string) || '';
+  const boundaryPolygonStr = (params.boundaryPolygon as string) || '';
+
+  // Parse polygon data if available
+  const boundaryPolygon = boundaryPolygonStr ? JSON.parse(boundaryPolygonStr) : null;
   
   const accidentAddress = barangay 
     ? `${purok ? purok + ', ' : ''}${barangay}${landmark ? ' (Near: ' + landmark + ')' : ''}` 
@@ -101,6 +135,7 @@ export default function TrackingScreen() {
   const [responderLocation, setResponderLocation] = useState<Coordinate | null>(null);
   const [initialDispatchLocation, setInitialDispatchLocation] = useState<Coordinate | null>(null);
   const [distanceToIncident, setDistanceToIncident] = useState<number | null>(null);
+  const [isFirstPersonView, setIsFirstPersonView] = useState(false);
   const [callTime, setCallTime] = useState('');
 
   // Auto-generate timestamp when mounted
@@ -130,7 +165,7 @@ export default function TrackingScreen() {
   const [isSimulating, setIsSimulating] = useState(false);
 
   // Response Status
-  const [incidentStatus, setIncidentStatus] = useState('Stand By');
+  const [incidentStatus, setIncidentStatus] = useState('Assigned');
 
   const { height: screenHeight } = Dimensions.get('window');
   const mapHeightValue = useRef(screenHeight * 0.45);
@@ -340,20 +375,24 @@ export default function TrackingScreen() {
             landmark: landmark
           });
           if (geocoded) {
+            const shouldBeLarge = (!landmark || landmark.trim() === '' || landmark === 'undefined') && (barangay || purok);
             setIncidentLocation({
               latitude: geocoded.latitude,
               longitude: geocoded.longitude,
+              radiusKm: shouldBeLarge ? 100 : 0.1,
             });
           } else {
             setIncidentLocation({
               latitude: currentLoc.latitude + 0.008,
               longitude: currentLoc.longitude + 0.002,
+              radiusKm: 100, // Fallback is also a large uncertain area
             });
           }
         } catch (e) {
           setIncidentLocation({
             latitude: currentLoc.latitude + 0.008,
             longitude: currentLoc.longitude + 0.002,
+            radiusKm: 100,
           });
         }
       }
@@ -395,12 +434,18 @@ export default function TrackingScreen() {
       responderLocation.longitude
     );
 
-    const distToTarget = getDistance(
+    let distToTarget = getDistance(
       responderLocation.latitude,
       responderLocation.longitude,
       incidentLocation.latitude,
       incidentLocation.longitude
     );
+
+    // If we have a boundary polygon (meaning no specific zone/purok), check if responder is inside it
+    if (boundaryPolygon && isPointInPolygon(responderLocation, boundaryPolygon)) {
+      distToTarget = 0; // Force distance to 0 to enable "Arrived"
+    }
+
     setDistanceToIncident(distToTarget);
 
     if (distFromStart >= 50 && !recordedTimes.current.dispatched) {
@@ -599,11 +644,20 @@ export default function TrackingScreen() {
                   incidentLocation={incidentLocation}
                   isResponding={isRespondingRoute}
                   isOffRoute={isOffRoute}
+                  boundaryPolygon={boundaryPolygon}
+                  isFirstPersonView={isFirstPersonView}
                   onRouteUpdate={handleRouteUpdate}
                 />
 
                 {/* Floating OSRM Simulator Buttons inside top-right of Map */}
                 <View style={styles.simPanel}>
+                  <TouchableOpacity 
+                    style={[styles.simBtn, { backgroundColor: isFirstPersonView ? '#0a84ff' : 'rgba(15, 23, 42, 0.9)' }]} 
+                    onPress={() => setIsFirstPersonView(!isFirstPersonView)}
+                  >
+                    <Ionicons name="compass" size={12} color={isFirstPersonView ? '#fff' : '#0a84ff'} style={{ marginRight: 4 }} />
+                    <Text style={[styles.simText, { color: isFirstPersonView ? '#fff' : '#0a84ff' }]}>3D View</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.simBtn} onPress={startSimulation}>
                     <Ionicons name="play" size={12} color="#0a84ff" style={{ marginRight: 4 }} />
                     <Text style={styles.simText}>Ride Sim</Text>
@@ -676,12 +730,25 @@ export default function TrackingScreen() {
 
 
             <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+              {isPhoneCallActive ? (
                 <TouchableOpacity 
                   style={[
                     styles.submitButton, 
-                    { flex: 1, backgroundColor: isPhoneCallActive ? '#555' : '#34c759', shadowColor: isPhoneCallActive ? 'transparent' : '#34c759' }
+                    { flex: 1, backgroundColor: '#ff3b30', shadowColor: '#ff3b30' }
                   ]}
-                  disabled={isPhoneCallActive}
+                  onPress={() => {
+                    CallDetectorModule.disconnectCall();
+                  }}
+                >
+                  <Ionicons name="call" size={18} color="#fff" style={{ transform: [{ rotate: '135deg' }], marginRight: 6 }} />
+                  <Text style={styles.submitButtonText}>Hang Up</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity 
+                  style={[
+                    styles.submitButton, 
+                    { flex: 1, backgroundColor: '#34c759', shadowColor: '#34c759' }
+                  ]}
                   onPress={() => {
                     const rawNumber = callerInfo.number || '';
                     const cleanNumber = rawNumber.replace(/[^\d+]/g, '');
@@ -703,15 +770,24 @@ export default function TrackingScreen() {
                   }}
                 >
                   <Ionicons name="call" size={18} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.submitButtonText}>{isPhoneCallActive ? 'In Call...' : 'Call'}</Text>
+                  <Text style={styles.submitButtonText}>Call</Text>
                 </TouchableOpacity>
+              )}
 
               <TouchableOpacity 
                 style={[styles.submitButton, { flex: 1, backgroundColor: '#8e8e93', shadowColor: '#8e8e93' }]}
                 onPress={() => {
                   Alert.alert('Reject Dispatch', 'Are you sure you want to reject this dispatch and remove it from your screen?', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Reject', style: 'destructive', onPress: () => {
+                    { text: 'Reject', style: 'destructive', onPress: async () => {
+                      const idToUpdate = dbIncidentId || callerInfo.id;
+                      if (idToUpdate) {
+                        try {
+                          await updateIncidentStatus(Number(idToUpdate), 'Rejected');
+                        } catch (e) {
+                          console.warn('Failed to reject on server:', e);
+                        }
+                      }
                       setIsActiveCall(false);
                       setIsSimulating(false);
                       setIncidentStatus('Stand By');
@@ -753,18 +829,17 @@ export default function TrackingScreen() {
                 style={[
                   styles.submitButton, 
                   { 
-                    backgroundColor: distanceToIncident !== null && distanceToIncident <= 1609 ? '#ff453a' : '#555', 
-                    shadowColor: distanceToIncident !== null && distanceToIncident <= 1609 ? '#ff453a' : 'transparent' 
+                    backgroundColor: distanceToIncident !== null && distanceToIncident <= (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 1609) ? '#ff453a' : '#555', 
+                    shadowColor: distanceToIncident !== null && distanceToIncident <= (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 1609) ? '#ff453a' : 'transparent' 
                   }
                 ]}
-                disabled={distanceToIncident === null || distanceToIncident > 1609}
+                disabled={distanceToIncident === null || distanceToIncident > (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 1609)}
                 onPress={() => {
                   Alert.alert(
                     "Confirm Arrival",
                     "Are you sure you have arrived at the incident location?",
                     [
-                      { text: "Cancel", style: "cancel" },
-                      { 
+                      { text: "Cancel", style: "cancel" },                       { 
                         text: "Yes, Arrived", 
                         onPress: async () => {
                           setIncidentStatus('On Scene');
@@ -775,6 +850,16 @@ export default function TrackingScreen() {
                           speakGuidance('You have successfully arrived at the scene.');
                           Speech.stop();
                           setIsActiveCall(false);
+
+                          // Mark incident as completed in the backend
+                          const idToUpdate = dbIncidentId || callerInfo.id;
+                          if (idToUpdate) {
+                            try {
+                              await updateIncidentStatus(Number(idToUpdate), 'completed');
+                            } catch (e) {
+                              console.warn('Failed to mark incident as completed:', e);
+                            }
+                          }
 
                           let actualLocationName = '';
                           if (responderLocation) {

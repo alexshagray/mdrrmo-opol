@@ -6,20 +6,20 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class PatientCareReport extends Model
+class PatientCareRecord extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
         'user_id',
         'patient_id',
-        'incident_id',
+        'incident_detail_id',
         'status',
         'pcr_data',
         'report_date',
     ];
 
-    protected $appends = ['full_name', 'contact_number', 'address', 'emergency_type', 'latitude', 'longitude'];
+    protected $appends = ['full_name', 'contact_number', 'address', 'emergency_type', 'latitude', 'longitude', 'incident_id'];
 
     protected $casts = [
         'latitude' => 'decimal:8',
@@ -37,9 +37,20 @@ class PatientCareReport extends Model
     {
         return $this->belongsTo(User::class, 'patient_id');
     }
+    public function incidentDetail(): BelongsTo
+    {
+        return $this->belongsTo(IncidentDetail::class, 'incident_detail_id');
+    }
+
     public function incident(): BelongsTo
     {
-        return $this->belongsTo(IncidentDetail::class, 'incident_id', 'incident_id');
+        // Maintain backwards compatibility if needed, but it's now incidentDetail
+        return $this->belongsTo(IncidentDetail::class, 'incident_detail_id');
+    }
+
+    public function getIncidentIdAttribute()
+    {
+        return $this->incidentDetail ? $this->incidentDetail->incident_id : null;
     }
 
     public function getFullNameAttribute()

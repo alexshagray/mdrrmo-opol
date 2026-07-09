@@ -15,14 +15,16 @@ export default function Staff2Overview({ setActiveSection, responders }) {
   const { data: pcrData } = useQuery({
     queryKey: ['dashboard_pcr'],
     queryFn: async () => {
-      const res = await fetch('/api/patient_care_reports');
+      const res = await fetch('/api/patient_care_records');
       return res.json();
     }
   });
 
-  const incidentsList = incidentsData?.data || [];
+  const rawIncidentsList = incidentsData?.data || [];
+  const incidentsList = rawIncidentsList.filter(i => !['cancelled', 'rejected', 'declined'].includes((i.status || '').toLowerCase()));
+  
   const activeIncidents = incidentsList.filter(i => i.status === 'Active' || i.status === 'Dispatched').length;
-  const totalIncidents = incidentsData?.total || 0;
+  const totalIncidents = incidentsList.length || 0;
 
   const pcrList = pcrData?.data || [];
   const totalPcr = pcrData?.total || 0;

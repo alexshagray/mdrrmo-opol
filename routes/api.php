@@ -8,7 +8,7 @@ use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PostEventController;
 use App\Http\Controllers\SystemNotificationController;
 use App\Http\Controllers\TwilioCallController;
-use App\Http\Controllers\PatientCareReportController;
+use App\Http\Controllers\PatientCareRecordController;
 use App\Http\Controllers\IncidentDetailController;
 use App\Http\Controllers\TrainedPersonnelController;
 use App\Http\Controllers\ResponderController;
@@ -16,6 +16,7 @@ use App\Http\Controllers\ResidentController;
 use App\Http\Controllers\EmergencyTypeController;
 
 Route::get('/emergency_types', [EmergencyTypeController::class, 'index']);
+Route::get('/barangays', [App\Http\Controllers\BarangayController::class, 'index']);
 
 use App\Models\User;
 
@@ -31,20 +32,21 @@ Route::get('/residents/check', [TwilioCallController::class, 'checkResident']);
 Route::post('/incidents/{id}/location', [TwilioCallController::class, 'updateIncidentLocation']);
 
 // Public Routes for Staff Dashboard (read-only access)
-Route::get('/patient_care_reports', [PatientCareReportController::class, 'index']);
-Route::delete('/patient_care_reports/{id}', [PatientCareReportController::class, 'destroy']);
-Route::put('/patient_care_reports/{id}', [PatientCareReportController::class, 'update']);
+Route::get('/patient_care_records', [PatientCareRecordController::class, 'index']);
+Route::delete('/patient_care_records/{id}', [PatientCareRecordController::class, 'destroy']);
+Route::put('/patient_care_records/{id}', [PatientCareRecordController::class, 'update']);
 
 Route::get('/incidents', [IncidentDetailController::class, 'index']);
 Route::get('/map/incidents', [IncidentDetailController::class, 'mapIncidents']);
 Route::delete('/incident_details', [IncidentDetailController::class, 'destroyAll']);
 Route::delete('/incident_details/{id}', [IncidentDetailController::class, 'destroy']);
 Route::put('/incident_details/{id}/caller', [IncidentDetailController::class, 'updateCallerName']);
+Route::put('/incident_details/{id}/status', [IncidentDetailController::class, 'updateStatus']);
 
 Route::get('/responder_logs', [App\Http\Controllers\ResponderLogController::class, 'index']);
 
 // Public Routes for Mobile App (PCR submission)
-Route::post('/patient_care_reports', [PatientCareReportController::class, 'store']);
+Route::post('/patient_care_records', [PatientCareRecordController::class, 'store']);
 
 // Authenticated Routes (Requires Bearer Token)
 Route::middleware('auth:sanctum')->group(function () {

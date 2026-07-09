@@ -10,6 +10,7 @@ class PostEvent extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'title',
         'event_type',
         'description',
@@ -23,4 +24,16 @@ class PostEvent extends Model
     protected $casts = [
         'event_date' => 'datetime',
     ];
+
+    protected $appends = ['creator_name'];
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function getCreatorNameAttribute()
+    {
+        return $this->creator ? $this->creator->name : 'System';
+    }
 }

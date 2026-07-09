@@ -12,7 +12,7 @@ class IncidentDetailController extends Controller
 {
     public function index(Request $request)
     {
-        $query = IncidentDetail::with('user')->latest();
+        $query = IncidentDetail::with(['user', 'location', 'emergencyType'])->latest();
         
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -24,7 +24,10 @@ class IncidentDetailController extends Controller
 
     public function mapIncidents()
     {
-        $incidents = IncidentDetail::with('user')->latest()->get();
+        $incidents = IncidentDetail::with(['user', 'location'])
+            ->whereNotIn('status', ['rejected', 'cancelled', 'declined'])
+            ->latest()
+            ->get();
         return response()->json($incidents);
     }
 
@@ -55,8 +58,8 @@ class IncidentDetailController extends Controller
         }
 
         $typeString = $request->input('emergency_type', 'Other');
-        $emergencyType = \App\Models\EmergencyType::where('name', 'like', "%{$typeString}%")->first();
-        $typeId = $emergencyType ? $emergencyType->id : (\App\Models\EmergencyType::where('name', 'Other')->value('id') ?? 1);
+        $emergencyType = \App\Models\EmergencyType::where('emergency_name', 'like', "%{$typeString}%")->first();
+        $typeId = $emergencyType ? $emergencyType->id : (\App\Models\EmergencyType::where('emergency_name', 'Other')->value('id') ?? 1);
 
         $incident = IncidentDetail::create([
             'user_id' => $user ? $user->id : null,
@@ -66,14 +69,17 @@ class IncidentDetailController extends Controller
             'report_date' => now(),
         ]);
 
+        $barangayId = $request->input('barangay_id');
+        if (!$barangayId && $request->input('barangay')) {
+            $b = \App\Models\Barangay::where('barangay_name', $request->input('barangay'))->first();
+            if ($b) $barangayId = $b->id;
+        }
+
         IncidentLocation::create([
-            'incident_report_id' => $incident->id,
+            'incident_detail_id' => $incident->id,
             'latitude' => $request->input('latitude'),
             'longitude' => $request->input('longitude'),
-            'barangay' => $request->input('barangay'),
-            'purok' => $request->input('purok'),
-            'landmark' => $request->input('landmark'),
-            'location' => trim($request->input('purok') . ' ' . $request->input('barangay') . ' ' . $request->input('landmark')),
+            'barangay_id' => $barangayId,
         ]);
 
         try {
@@ -139,6 +145,28 @@ class IncidentDetailController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Caller name updated successfully!'
+        ]);
+    }
+
+    public function updateStatus(Request $request, $id)
+    {
+        $incident = IncidentDetail::find($id);
+        if (!$incident) {
+            return response()->json(['success' => false, 'message' => 'Incident not found'], 404);
+        }
+
+        $request->validate([
+            'status' => 'required|string'
+        ]);
+
+        $incident->update([
+            'status' => strtolower($request->status)
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Incident status updated successfully to ' . $request->status,
+            'incident' => $incident
         ]);
     }
 }

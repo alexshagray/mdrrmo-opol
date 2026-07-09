@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
-use App\Models\PatientCareReport;
+use App\Models\PatientCareRecord;
 use App\Models\InventoryItem;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(BarangaySeeder::class);
         $this->call(EmergencyTypeSeeder::class);
 
         // 1. Create System Administrators
@@ -40,6 +41,16 @@ class DatabaseSeeder extends Seeder
             'email' => 'staff1@balansag.com',
             'password' => Hash::make('password123'),
             'role' => 'staff1',
+            'approved' => true,
+        ]);
+
+        $staff2 = User::create([
+            'first_name' => 'Staff',
+            'last_name' => 'Two',
+            'phone_number' => '+639000000022',
+            'email' => 'staff2@balansag.com',
+            'password' => Hash::make('password123'),
+            'role' => 'staff2',
             'approved' => true,
         ]);
 
@@ -116,8 +127,8 @@ class DatabaseSeeder extends Seeder
             'report_date' => now()->subHours(5),
         ]);
         IncidentLocation::create([
-            'incident_report_id' => $incident1->id,
-            'location' => 'Purok 3, Barangay Poblacion, Opol, Misamis Oriental',
+            'incident_detail_id' => $incident1->id,
+            'barangay_id' => 1,
             'latitude' => 8.51900000,
             'longitude' => 124.57650000,
         ]);
@@ -130,8 +141,8 @@ class DatabaseSeeder extends Seeder
             'report_date' => now()->subHours(2),
         ]);
         IncidentLocation::create([
-            'incident_report_id' => $incident2->id,
-            'location' => 'Purok 5, Riverside, Opol, Misamis Oriental',
+            'incident_detail_id' => $incident2->id,
+            'barangay_id' => 2,
             'latitude' => 8.52050000,
             'longitude' => 124.57900000,
         ]);
@@ -144,8 +155,8 @@ class DatabaseSeeder extends Seeder
             'report_date' => now()->subMinutes(30),
         ]);
         IncidentLocation::create([
-            'incident_report_id' => $incident3->id,
-            'location' => 'Purok 1, Taboc, Opol, Misamis Oriental',
+            'incident_detail_id' => $incident3->id,
+            'barangay_id' => 3,
             'latitude' => 8.51300000,
             'longitude' => 124.56800000,
         ]);
@@ -158,17 +169,17 @@ class DatabaseSeeder extends Seeder
             'report_date' => now()->subMinutes(15),
         ]);
         IncidentLocation::create([
-            'incident_report_id' => $incident4->id,
-            'location' => 'Zone 2, Barangay Barra, Opol, Misamis Oriental',
+            'incident_detail_id' => $incident4->id,
+            'barangay_id' => 4,
             'latitude' => 8.51050000,
             'longitude' => 124.60100000,
         ]);
 
         // 6. Create Patient Care Reports (PCRs) with complete diagnostic metadata
-        $pcr1 = PatientCareReport::create([
+        $pcr1 = PatientCareRecord::create([
             'user_id' => $responder->id,
             'patient_id' => $patient1->id,
-            'incident_id' => 'INC-PCR-1001',
+            'incident_detail_id' => $incident1->id,
             'status' => 'completed',
             'report_date' => now()->subHours(5),
             'pcr_data' => [
@@ -231,10 +242,10 @@ class DatabaseSeeder extends Seeder
             ],
         ]);
 
-        $pcr2 = PatientCareReport::create([
+        $pcr2 = PatientCareRecord::create([
             'user_id' => $responder->id,
             'patient_id' => $patient2->id,
-            'incident_id' => 'INC-PCR-1002',
+            'incident_detail_id' => $incident2->id,
             'status' => 'completed',
             'report_date' => now()->subHours(2),
             'pcr_data' => [
@@ -334,24 +345,21 @@ class DatabaseSeeder extends Seeder
             'name' => 'Juan Dela Cruz',
             'age' => 28,
             'sex' => 'Male',
-            'zone' => 'Zone 1',
-            'barangay' => 'Poblacion'
+            'barangay_id' => 1
         ]);
         
         \App\Models\TrainedPersonnel::create([
             'name' => 'Maria Santos',
             'age' => 34,
             'sex' => 'Female',
-            'zone' => 'Zone 2',
-            'barangay' => 'Barra'
+            'barangay_id' => 2
         ]);
 
         \App\Models\TrainedPersonnel::create([
             'name' => 'Pedro Penduko',
             'age' => 45,
             'sex' => 'Male',
-            'zone' => 'Zone 3',
-            'barangay' => 'Igpit'
+            'barangay_id' => 3
         ]);
     }
 }

@@ -13,17 +13,20 @@ class EmergencyTypeSeeder extends Seeder
     public function run(): void
     {
         $types = [
-            ['name' => 'EMERGENCY RESPONSE', 'color_hex' => '#ef4444', 'emoji_icon' => '🚑', 'severity_level' => 'Critical', 'description' => 'General medical or critical emergency response'],
-            ['name' => 'VEHICULAR EMERGENCY EXTRICATION', 'color_hex' => '#f59e0b', 'emoji_icon' => '🚗', 'severity_level' => 'High', 'description' => 'Vehicle accidents requiring extrication'],
-            ['name' => 'WATER RESCUE', 'color_hex' => '#3b82f6', 'emoji_icon' => '🌊', 'severity_level' => 'High', 'description' => 'Drowning, flood, or water-related emergencies'],
-            ['name' => 'HIGH ANGLE RESCUE', 'color_hex' => '#8b5cf6', 'emoji_icon' => '🧗', 'severity_level' => 'High', 'description' => 'Rescues from cliffs, towers, or high structures'],
-            ['name' => 'SEARCH AND RESCUE', 'color_hex' => '#10b981', 'emoji_icon' => '🚁', 'severity_level' => 'High', 'description' => 'General search and rescue operations'],
-            ['name' => 'BREAKING AND BREACHING (COLLAPSE)', 'color_hex' => '#6b7280', 'emoji_icon' => '🏢', 'severity_level' => 'Critical', 'description' => 'Structural collapse or trapped individuals'],
-            ['name' => 'LANDSLIDE/MOUNTAIN SEARCH & RESCUE', 'color_hex' => '#b45309', 'emoji_icon' => '⛰️', 'severity_level' => 'Critical', 'description' => 'Landslides or mountain rescue operations'],
+            ['emergency_name' => 'EMERGENCY RESPONSE', 'description' => 'General medical or critical emergency response'],
+            ['emergency_name' => 'VEHICULAR EMERGENCY EXTRICATION', 'description' => 'Vehicle accidents requiring extrication'],
+            ['emergency_name' => 'WATER RESCUE', 'description' => 'Drowning, flood, or water-related emergencies'],
+            ['emergency_name' => 'HIGH ANGLE RESCUE', 'description' => 'Rescues from cliffs, towers, or high structures'],
+            ['emergency_name' => 'SEARCH AND RESCUE', 'description' => 'General search and rescue operations'],
+            ['emergency_name' => 'BREAKING AND BREACHING (COLLAPSE)', 'description' => 'Structural collapse or trapped individuals'],
+            ['emergency_name' => 'LANDSLIDE/MOUNTAIN SEARCH & RESCUE', 'description' => 'Landslides or mountain rescue operations'],
         ];
 
         foreach ($types as $type) {
-            \App\Models\EmergencyType::create($type);
+            \App\Models\EmergencyType::updateOrCreate(
+                ['emergency_name' => $type['emergency_name']],
+                ['description' => $type['description']]
+            );
         }
     }
 }

@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { CallDetectorModule } from 'expo-call-detector';
-import { checkResidentDatabase, reportIncident, getEmergencyTypes } from '@/services/api';
+import { checkResidentDatabase, reportIncident, getEmergencyTypes, fetchBarangays } from '@/services/api';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import GISMapPicker from '@/components/GISMapPicker';
@@ -52,10 +52,11 @@ export default function IncomingCallScreen() {
   const [duration, setDuration] = useState(0);
   const [isNavigatingAway, setIsNavigatingAway] = useState(false);
   const [emergencyTypes, setEmergencyTypes] = useState<string[]>([]);
+  const [barangaysList, setBarangaysList] = useState<any[]>([]);
   const navigation = useNavigation();
 
   useEffect(() => {
-    const fetchTypes = async () => {
+    const fetchData = async () => {
       try {
         const types = await getEmergencyTypes();
         setEmergencyTypes(types.map((t: any) => t.name));
@@ -71,8 +72,15 @@ export default function IncomingCallScreen() {
           'Flood/Water Rescue'
         ]);
       }
+
+      try {
+        const bList = await fetchBarangays();
+        setBarangaysList(bList);
+      } catch (error) {
+        console.warn('Failed to load barangays list', error);
+      }
     };
-    fetchTypes();
+    fetchData();
   }, []);
 
   // Database checks & form state
@@ -287,11 +295,11 @@ export default function IncomingCallScreen() {
   async function handleDispatch() {
     const errors = {
       barangay: !barangay,
-      purok: !purok,
+      purok: false, // Made optional so barangays without zones can still be dispatched
       incidentDetails: !incidentDetails
     };
 
-    if (errors.barangay || errors.purok || errors.incidentDetails) {
+    if (errors.barangay || errors.incidentDetails) {
       setFormErrors(errors);
       return;
     }
@@ -300,26 +308,62 @@ export default function IncomingCallScreen() {
     setIsNavigatingAway(true);
     // Prepare params to pass to the tracking screen
     const passName = isRegistered && callerDetails?.full_name ? callerDetails.full_name : manualName;
-    const passLat = callerLocation?.latitude || callerDetails?.latitude;
-    const passLng = callerLocation?.longitude || callerDetails?.longitude;
+    let passLat = callerLocation?.latitude || callerDetails?.latitude;
+    let passLng = callerLocation?.longitude || callerDetails?.longitude;
     
-    // Auto-submit incident to Staff2 dashboard
+    // Auto-geocode if missing coordinates before dispatch
+    if (!passLat || !passLng) {
+      try {
+        const addressStr = barangay ? `${purok ? purok + ', ' : ''}${barangay}${landmark ? ' (Near: ' + landmark + ')' : ''}` : (landmark || '');
+        if (addressStr) {
+          const geocoded = await robustGeocode(addressStr, {
+            barangay: barangay,
+            purok: purok,
+            landmark: landmark
+          });
+          if (geocoded) {
+            passLat = geocoded.latitude;
+            passLng = geocoded.longitude;
+          }
+        }
+      } catch (e) {
+        console.warn('Geocoding before dispatch failed', e);
+      }
+    }
+
+    // Auto-submit incident to Staff2 dashboard and capture the DB numeric id
+    let dbIncidentId = '';
     if (phoneNumber) {
       try {
-        await reportIncident({
+        const result = await reportIncident({
           incident_id: '',
           caller_name: passName,
           caller_number: phoneNumber,
-          latitude: passLat,
-          longitude: passLng,
+          latitude: passLat || 8.5204, // Fallback to Opol center if totally unknown
+          longitude: passLng || 124.5772,
           emergency_type: incidentDetails || 'Emergency Call',
           status: 'active',
           barangay: barangay,
           purok: purok,
           landmark: landmark
         });
+        // Capture the real DB id (numeric) returned by the backend
+        if (result?.incident_id) {
+          dbIncidentId = String(result.incident_id);
+        }
       } catch (e) {
         console.warn('Failed to auto-submit incident report', e);
+      }
+    }
+
+    // Calculate boundary polygon if no purok is selected
+    let boundaryPolygon = '';
+    if (!purok && barangaysList.length > 0) {
+      const selectedBarangayData = barangaysList.find(b => b.barangay_name === barangay);
+      if (selectedBarangayData && selectedBarangayData.boundary_polygon) {
+        boundaryPolygon = typeof selectedBarangayData.boundary_polygon === 'string' 
+          ? selectedBarangayData.boundary_polygon 
+          : JSON.stringify(selectedBarangayData.boundary_polygon);
       }
     }
 
@@ -337,6 +381,8 @@ export default function IncomingCallScreen() {
         callerLocation: passLat ? JSON.stringify({latitude: passLat, longitude: passLng}) : '',
         isRegistered: isRegistered ? 'true' : 'false',
         gpsEnabled: passLat ? 'true' : 'false',
+        dbIncidentId: dbIncidentId,
+        boundaryPolygon: boundaryPolygon,
       } 
     });
   }
@@ -533,20 +579,34 @@ export default function IncomingCallScreen() {
 
               <Text style={styles.label}>Barangay <Text style={styles.requiredAsterisk}>*</Text></Text>
               <TouchableOpacity 
-                style={[styles.input, { justifyContent: 'center' }, formErrors.barangay && styles.inputError]} 
+                style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, formErrors.barangay && styles.inputError]} 
                 onPress={() => { setShowBrgyModal(true); setFormErrors(prev => ({...prev, barangay: false})); }}
               >
-                <Text style={{ color: barangay ? '#fff' : '#666', fontSize: 15 }}>{barangay || 'Select Barangay'}</Text>
+                <Text style={{ color: barangay ? '#fff' : '#666', fontSize: 15, flex: 1 }}>{barangay || 'Select Barangay'}</Text>
+                {barangay ? (
+                  <TouchableOpacity onPress={() => { setBarangay(''); setPurok(''); setLandmark(''); }} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={18} color="#8e8e93" />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons name="chevron-down" size={18} color="#666" />
+                )}
               </TouchableOpacity>
               {formErrors.barangay && <Text style={styles.errorText}>Barangay is required.</Text>}
 
               <Text style={styles.label}>Zone <Text style={styles.requiredAsterisk}>*</Text></Text>
               {availablePuroks.length > 0 ? (
                 <TouchableOpacity 
-                  style={[styles.input, { justifyContent: 'center' }, formErrors.purok && styles.inputError]} 
+                  style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, formErrors.purok && styles.inputError]} 
                   onPress={() => { setShowPurokModal(true); setFormErrors(prev => ({...prev, purok: false})); }}
                 >
-                  <Text style={{ color: purok ? '#fff' : '#666', fontSize: 15 }}>{purok || 'Select Zone'}</Text>
+                  <Text style={{ color: purok ? '#fff' : '#666', fontSize: 15, flex: 1 }}>{purok || 'Select Zone'}</Text>
+                  {purok ? (
+                    <TouchableOpacity onPress={() => { setPurok(''); setLandmark(''); }} style={{ padding: 4 }}>
+                      <Ionicons name="close-circle" size={18} color="#8e8e93" />
+                    </TouchableOpacity>
+                  ) : (
+                    <Ionicons name="chevron-down" size={18} color="#666" />
+                  )}
                 </TouchableOpacity>
               ) : (
                 <TextInput
@@ -563,10 +623,17 @@ export default function IncomingCallScreen() {
               {availableLandmarks.length > 0 ? (
                 <View style={[styles.input, { paddingVertical: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' }]}>
                   <TouchableOpacity 
-                    style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, justifyContent: 'center' }} 
+                    style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} 
                     onPress={() => setShowLandmarkModal(true)}
                   >
-                    <Text style={{ color: landmark ? '#fff' : '#666', fontSize: 15 }}>{landmark || 'Select Landmark'}</Text>
+                    <Text style={{ color: landmark ? '#fff' : '#666', fontSize: 15, flex: 1 }}>{landmark || 'Select Landmark'}</Text>
+                    {landmark ? (
+                      <TouchableOpacity onPress={() => setLandmark('')} style={{ padding: 4 }}>
+                        <Ionicons name="close-circle" size={18} color="#8e8e93" />
+                      </TouchableOpacity>
+                    ) : (
+                      <Ionicons name="chevron-down" size={18} color="#666" />
+                    )}
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -578,13 +645,21 @@ export default function IncomingCallScreen() {
                   onChangeText={setLandmark}
                 />
               )}
+              
           <Text style={styles.label}>Nature of Emergency <Text style={styles.requiredAsterisk}>*</Text></Text>
           <View style={[styles.input, { paddingVertical: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' }, formErrors.incidentDetails && styles.inputError]}>
             <TouchableOpacity 
-              style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, justifyContent: 'center' }} 
+              style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} 
               onPress={() => { setShowEmergencyModal(true); setFormErrors(prev => ({...prev, incidentDetails: false})); }}
             >
-              <Text style={{ color: incidentDetails ? '#fff' : '#666', fontSize: 15 }}>{incidentDetails || 'Select Emergency Type'}</Text>
+              <Text style={{ color: incidentDetails ? '#fff' : '#666', fontSize: 15, flex: 1 }}>{incidentDetails || 'Select Emergency Type'}</Text>
+              {incidentDetails ? (
+                <TouchableOpacity onPress={() => setIncidentDetails('')} style={{ padding: 4 }}>
+                  <Ionicons name="close-circle" size={18} color="#8e8e93" />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons name="chevron-down" size={18} color="#666" />
+              )}
             </TouchableOpacity>
           </View>
           {formErrors.incidentDetails && <Text style={styles.errorText}>Nature of Emergency is required.</Text>}
@@ -612,6 +687,7 @@ export default function IncomingCallScreen() {
           if (b !== barangay) {
             setBarangay(b);
             setPurok(''); // Reset purok when barangay changes
+            setLandmark(''); // Reset landmark when barangay changes
           }
         }} 
         title="Select Barangay" 
@@ -646,7 +722,9 @@ export default function IncomingCallScreen() {
 
 const SearchableSelectModal = ({ visible, onClose, data, onSelect, title, allowCustomAdd }: { visible: boolean, onClose: () => void, data: string[], onSelect: (val: string) => void, title: string, allowCustomAdd?: boolean }) => {
   const [search, setSearch] = useState('');
-  const filtered = data.filter(item => item.toLowerCase().includes(search.toLowerCase()));
+  // Deduplicate data to prevent identical options and duplicate key errors
+  const uniqueData = Array.from(new Set(data));
+  const filtered = uniqueData.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -666,7 +744,7 @@ const SearchableSelectModal = ({ visible, onClose, data, onSelect, title, allowC
             onChangeText={setSearch}
           />
           <ScrollView keyboardShouldPersistTaps="handled">
-            {allowCustomAdd && search.trim().length > 0 && !data.some(d => d.toLowerCase() === search.trim().toLowerCase()) && (
+            {allowCustomAdd && search.trim().length > 0 && !uniqueData.some(d => d.toLowerCase() === search.trim().toLowerCase()) && (
               <TouchableOpacity 
                 style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f1f26', flexDirection: 'row', alignItems: 'center' }} 
                 onPress={() => { onSelect(search.trim()); setSearch(''); onClose(); }}
@@ -675,9 +753,9 @@ const SearchableSelectModal = ({ visible, onClose, data, onSelect, title, allowC
                 <Text style={{ color: '#0a84ff', fontSize: 16, fontWeight: '600' }}>Add "{search.trim()}"</Text>
               </TouchableOpacity>
             )}
-            {filtered.map(item => (
+            {filtered.map((item, index) => (
               <TouchableOpacity 
-                key={item} 
+                key={`${item}-${index}`} 
                 style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f1f26' }} 
                 onPress={() => { onSelect(item); setSearch(''); onClose(); }}
               >

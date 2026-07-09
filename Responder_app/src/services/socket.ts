@@ -13,7 +13,7 @@ const getDevHostIp = (): string => {
     return hostUri.split(':')[0];
   }
   // Force the correct Wi-Fi IP address for the user's current network
-  return '192.168.254.112';
+  return '192.168.1.19';
 };
 
 // --- CHOOSE YOUR CONNECTION METHOD (Uncomment the one you want to use) ---

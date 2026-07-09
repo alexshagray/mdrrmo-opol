@@ -2,18 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\PatientCareReport;
+use App\Models\PatientCareRecord;
 use App\Models\User;
 use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
-class PatientCareReportController extends Controller
+class PatientCareRecordController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PatientCareReport::with('user', 'patient')->latest();
+        $query = PatientCareRecord::with('user', 'patient')->latest();
         
         if ($request->has('search') && !empty($request->search)) {
             $searchTerms = explode(' ', $request->search);
@@ -78,27 +78,30 @@ class PatientCareReportController extends Controller
                 ]);
             }
 
+            $typeString = $data['emergency_type'] ?? 'Other';
+            $emergencyType = \App\Models\EmergencyType::where('emergency_name', 'like', "%{$typeString}%")->first();
+            $typeId = $emergencyType ? $emergencyType->id : (\App\Models\EmergencyType::where('emergency_name', 'Other')->value('id') ?? 1);
+
             // Create Incident First
             $incident = IncidentDetail::create([
                 'user_id' => $patientUser->id,
                 'incident_id' => $incidentId,
-                'emergency_type' => $data['emergency_type'] ?? 'Not specified',
+                'emergency_type_id' => $typeId,
                 'status' => 'completed',
                 'report_date' => now(),
             ]);
 
             IncidentLocation::create([
-                'incident_report_id' => $incident->id,
-                'location' => $data['address'] ?? 'Not specified',
+                'incident_detail_id' => $incident->id,
                 'latitude' => $data['latitude'] ?? null,
                 'longitude' => $data['longitude'] ?? null,
             ]);
 
-            // Create Patient Care Report (Strict Normalization)
-            $pcr = PatientCareReport::create([
+            // Create Patient Care Record (Strict Normalization)
+            $pcr = PatientCareRecord::create([
                 'user_id' => null, // Would be auth()->id() if responder logged in
                 'patient_id' => $patientUser->id,
-                'incident_id' => $incidentId,
+                'incident_detail_id' => $incident->id,
                 'status' => 'completed',
                 'pcr_data' => $data['pcr_data'] ?? null,
                 'report_date' => now(),
@@ -132,7 +135,7 @@ class PatientCareReportController extends Controller
 
     public function update(Request $request, $id)
     {
-        $report = PatientCareReport::find($id);
+        $report = PatientCareRecord::find($id);
         if ($report) {
             $report->update($request->all());
             return response()->json([
@@ -149,7 +152,7 @@ class PatientCareReportController extends Controller
 
     public function destroy($id)
     {
-        $report = PatientCareReport::find($id);
+        $report = PatientCareRecord::find($id);
         if ($report) {
             $report->delete();
             return response()->json([

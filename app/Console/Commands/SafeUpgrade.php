@@ -10,7 +10,7 @@ use App\Models\InventoryItem;
 use App\Models\SystemNotification;
 use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
-use App\Models\PatientCareReport;
+use App\Models\PatientCareRecord;
 use App\Models\EmergencyType;
 use Illuminate\Support\Facades\Schema;
 
@@ -34,7 +34,7 @@ class SafeUpgrade extends Command
         // Incident reports need special mapping later
         $incidentReports = \DB::table('incident_reports')->get()->map(function($i) { return (array)$i; })->toArray();
         $incidentLocations = \DB::table('incident_locations')->get()->map(function($i) { return (array)$i; })->toArray();
-        $patientCareReports = \DB::table('patient_care_reports')->get()->map(function($i) { return (array)$i; })->toArray();
+        $PatientCareRecords = \DB::table('patient_care_records')->get()->map(function($i) { return (array)$i; })->toArray();
 
         // 2. MIGRATE FRESH
         $this->info('Running migrate:fresh...');
@@ -103,12 +103,12 @@ class SafeUpgrade extends Command
         if (count($incidentLocations)) \DB::table('incident_locations')->insert($incidentLocations);
         
         // Ensure pcr_data is cast back to json for insertion if it's an array
-        foreach ($patientCareReports as &$pcr) {
+        foreach ($PatientCareRecords as &$pcr) {
             if (is_array($pcr['pcr_data'])) {
                 $pcr['pcr_data'] = json_encode($pcr['pcr_data']);
             }
         }
-        if (count($patientCareReports)) \DB::table('patient_care_reports')->insert($patientCareReports);
+        if (count($PatientCareRecords)) \DB::table('patient_care_records')->insert($PatientCareRecords);
 
         Schema::enableForeignKeyConstraints();
 

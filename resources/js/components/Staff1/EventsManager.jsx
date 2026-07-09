@@ -253,8 +253,17 @@ export default function EventsManager({ role = 'Staff1' }) {
                         <h4 className="text-white font-bold m-0">{ev.title}</h4>
                       </div>
                       
-                      <div className="flex flex-col gap-3 text-sm">
-                        <div className="flex items-start gap-3">
+                        <div className="flex flex-col gap-3 text-sm">
+                          {ev.creator_name && (
+                            <div className="flex items-start gap-3">
+                              <span className="text-gray-500 mt-0.5">👤</span>
+                              <div>
+                                <span className="text-gray-500 text-xs block">Posted by</span>
+                                <span className="text-gray-300 font-semibold">{ev.creator_name}</span>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-start gap-3">
                           <span className="text-gray-500 mt-0.5">📅</span>
                           <div>
                             <span className="text-gray-500 text-xs block">Date</span>

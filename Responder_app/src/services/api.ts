@@ -241,6 +241,16 @@ export const fetchIncidents = async () => {
   }
 };
 
+export const fetchBarangays = async () => {
+  try {
+    const { data } = await apiClient.get('/barangays');
+    return data;
+  } catch (error) {
+    console.warn('Error fetching barangays:', error);
+    return [];
+  }
+};
+
 export const reportIncident = async (data: IncidentPayload) => {
   try {
     const response = await apiClient.post('/incident_details', data);
@@ -255,6 +265,15 @@ export const reportIncident = async (data: IncidentPayload) => {
   }
 };
 
+export const updateIncidentStatus = async (id: number, status: string) => {
+  try {
+    const response = await apiClient.put(`/incident_details/${id}/status`, { status });
+    return response.data;
+  } catch (error) {
+    console.warn(`Error updating incident status to ${status} (falling back to simulation):`, error);
+    return { success: true };
+  }
+};
 export const deleteIncident = async (id: number) => {
   try {
     const response = await apiClient.delete(`/incident_details/${id}`);
@@ -279,9 +298,9 @@ export const searchResidents = async (query: string) => {
   }
 };
 
-export const savePatientCareReport = async (payload: any) => {
+export const savePatientCareRecord = async (payload: any) => {
   try {
-    const response = await apiClient.post('/patient_care_reports', payload, { timeout: 8000 });
+    const response = await apiClient.post('/patient_care_records', payload, { timeout: 8000 });
     return response.data;
   } catch (error) {
     console.warn('Error saving patient care report (falling back to simulation):', error);
@@ -293,9 +312,9 @@ export const savePatientCareReport = async (payload: any) => {
   }
 };
 
-export const fetchPatientCareReports = async () => {
+export const fetchPatientCareRecords = async () => {
   try {
-    const { data } = await apiClient.get('/patient_care_reports');
+    const { data } = await apiClient.get('/patient_care_records');
     return data;
   } catch (e) {
     console.warn('Error fetching patient care reports (falling back to simulation)');
@@ -316,9 +335,9 @@ export const fetchPatientCareReports = async () => {
   }
 };
 
-export const deletePatientCareReport = async (id: number) => {
+export const deletePatientCareRecord = async (id: number) => {
   try {
-    const { data } = await apiClient.delete(`/patient_care_reports/${id}`);
+    const { data } = await apiClient.delete(`/patient_care_records/${id}`);
     return data;
   } catch (e) {
     console.warn('Error deleting patient care report, simulated deletion anyway', e);

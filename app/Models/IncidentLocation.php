@@ -12,10 +12,10 @@ class IncidentLocation extends Model
         'latitude',
         'longitude',
         'location',
-        'barangay',
-        'purok',
-        'landmark'
+        'barangay_id'
     ];
+
+    protected $appends = ['barangay'];
 
     protected $casts = [
         'latitude' => 'decimal:8',
@@ -25,5 +25,15 @@ class IncidentLocation extends Model
     public function report(): BelongsTo
     {
         return $this->belongsTo(IncidentDetail::class, 'incident_detail_id');
+    }
+
+    public function barangayModel()
+    {
+        return $this->belongsTo(Barangay::class, 'barangay_id');
+    }
+
+    public function getBarangayAttribute()
+    {
+        return $this->barangayModel ? $this->barangayModel->name : null;
     }
 }

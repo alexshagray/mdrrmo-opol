@@ -20,7 +20,7 @@ export default function Pcr({ setNotifications }) {
   const { data: pcrData, isLoading } = useQuery({
     queryKey: ['pcrReports', pcrPage, debouncedSearchQuery],
     queryFn: async () => {
-      let url = `/api/patient_care_reports?page=${pcrPage}`;
+      let url = `/api/patient_care_records?page=${pcrPage}`;
       if (debouncedSearchQuery) url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
       const response = await fetch(url);
       return response.json();
@@ -32,7 +32,7 @@ export default function Pcr({ setNotifications }) {
 
   const deletePcrMutation = useMutation({
     mutationFn: async (id) => {
-      const response = await fetch(`/api/patient_care_reports/${id}`, {
+      const response = await fetch(`/api/patient_care_records/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ export default function Pcr({ setNotifications }) {
 
   const editPcrMutation = useMutation({
     mutationFn: async ({ report, newName, newStatus }) => {
-      const response = await fetch(`/api/patient_care_reports/${report.id || report.incident_id}`, {
+      const response = await fetch(`/api/patient_care_records/${report.id || report.incident_id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

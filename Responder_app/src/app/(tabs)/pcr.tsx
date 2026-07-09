@@ -16,7 +16,7 @@ import {
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
-import { searchResidents, savePatientCareReport, fetchUserProfile } from '@/services/api';
+import { searchResidents, savePatientCareRecord, fetchUserProfile } from '@/services/api';
 
 export default function PCRScreen() {
   const router = useRouter();
@@ -356,7 +356,7 @@ export default function PCRScreen() {
           step7: { waiverName, witnessName, isSigned }
         }
       };
-      await savePatientCareReport(payload);
+      await savePatientCareRecord(payload);
       await FileSystem.deleteAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt', { idempotent: true });
       Alert.alert('Success', 'Patient Care Report saved successfully.', [
         { text: 'OK', onPress: () => router.push('/(tabs)/manage') }

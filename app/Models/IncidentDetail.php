@@ -44,6 +44,16 @@ class IncidentDetail extends Model
         return $this->belongsTo(EmergencyType::class);
     }
 
+    public function patientCareRecords()
+    {
+        return $this->hasMany(PatientCareRecord::class, 'incident_detail_id');
+    }
+
+    public function responderLogs()
+    {
+        return $this->hasMany(ResponderLog::class, 'incident_detail_id');
+    }
+
     public function getLatitudeAttribute()
     {
         return $this->location ? $this->location->latitude : null;

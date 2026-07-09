@@ -72,6 +72,9 @@ export default function Staff2App() {
           if (res.ok) {
               const data = await res.json();
               setStaffUser(data);
+          } else if (res.status === 401) {
+              // Token expired or invalid
+              handleLogout();
           }
       } catch (e) {
           console.error('Failed to load profile', e);

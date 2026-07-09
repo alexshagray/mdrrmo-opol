@@ -38,9 +38,9 @@ class Report extends Model
         return $this->belongsTo(Department::class);
     }
 
-    public function patientCareReport(): HasOne
+    public function patientCareRecord(): HasOne
     {
-        return $this->hasOne(PatientCareReport::class);
+        return $this->hasOne(patientCareRecord::class);
     }
 
     public function incidentDetail(): HasOne

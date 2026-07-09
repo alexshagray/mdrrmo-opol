@@ -45,6 +45,18 @@ export default function TabsLayout() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
+      try {
+        const lastLoc = await Location.getLastKnownPositionAsync();
+        if (lastLoc) {
+          currentLoc = {
+            latitude: lastLoc.coords.latitude,
+            longitude: lastLoc.coords.longitude,
+          };
+        }
+      } catch (e) {
+        console.warn('Could not get initial location', e);
+      }
+
       locationSubscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
