@@ -30,6 +30,7 @@ export default function RootLayout() {
 
   const checkActiveCall = () => {
     if (!CallDetectorModule) return;
+    if (!isAuthenticated) return;
     try {
       if (CallDetectorModule.getCurrentCallPhoneNumber) {
         const activeNumber = CallDetectorModule.getCurrentCallPhoneNumber();
@@ -123,11 +124,13 @@ export default function RootLayout() {
       });
     };
 
-    setupCallDetection();
+    if (isAuthenticated) {
+      setupCallDetection();
+    }
 
     // 3. Monitor AppState to check for active calls when the app returns to foreground
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
+      if (nextAppState === 'active' && isAuthenticated) {
         checkActiveCall();
       }
     };
@@ -137,7 +140,7 @@ export default function RootLayout() {
       callSubscriptionRef.current?.remove();
       appStateSubscription.remove();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Handle routing ONLY when Expo Router navigation is actually ready
   useEffect(() => {

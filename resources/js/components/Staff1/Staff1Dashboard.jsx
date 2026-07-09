@@ -31,7 +31,7 @@ export default function Staff1Dashboard({ setActiveSection }) {
 
   const inventoryTotal = invData?.total || 0;
   const inventoryItems = invData?.data || [];
-  const lowStockCount = inventoryItems.filter(i => i.status === 'Low Stock' || i.status === 'Out of Stock').length;
+  const lowStockCount = inventoryItems.filter(i => i.status === 'Low Stock' || i.status === 'Unavailable').length;
 
   const personnelTotal = tpData?.total || 0;
   const personnelList = tpData?.data || [];

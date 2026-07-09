@@ -43,8 +43,8 @@ class Report extends Model
         return $this->hasOne(PatientCareReport::class);
     }
 
-    public function incidentReport(): HasOne
+    public function incidentDetail(): HasOne
     {
-        return $this->hasOne(IncidentReport::class);
+        return $this->hasOne(IncidentDetail::class);
     }
 }

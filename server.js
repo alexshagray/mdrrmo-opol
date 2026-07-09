@@ -37,10 +37,10 @@ app.post('/api/incident-location-update', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/dispatch-report', (req, res) => {
-  const { dispatchReport } = req.body;
-  console.log('[Socket] Dispatch report received for Responder:', dispatchReport.responder_id);
-  io.emit('dispatchReportUpdate', dispatchReport);
+app.post('/api/responder-log', (req, res) => {
+  const { responderLog } = req.body;
+  console.log('[Socket] Responder log received for Responder:', responderLog.responder_id);
+  io.emit('responderLogUpdate', responderLog);
   res.json({ success: true });
 });
 

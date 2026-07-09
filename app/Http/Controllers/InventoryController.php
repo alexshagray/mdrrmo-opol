@@ -10,6 +10,10 @@ class InventoryController extends Controller
     public function index(Request $request)
     {
         $query = InventoryItem::query();
+        if ($request->has('archived') && filter_var($request->archived, FILTER_VALIDATE_BOOLEAN)) {
+            $query->onlyTrashed();
+        }
+
         if ($request->has('category') && $request->category !== 'All') {
             $query->where('category', $request->category);
         }
@@ -26,29 +30,36 @@ class InventoryController extends Controller
         if ($request->has('search') && !empty($request->search)) {
             $query->where('name', 'LIKE', '%' . $request->search . '%');
         }
-        return response()->json($query->orderBy('created_at', 'desc')->paginate(500));
+
+        if ($request->has('status') && $request->status !== 'All') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('paginate') && $request->paginate === 'false') {
+            return response()->json(['data' => $query->orderBy('created_at', 'desc')->get()]);
+        }
+
+        return response()->json($query->orderBy('created_at', 'desc')->paginate(10));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'item_condition' => 'required|string|max:255',
+            'name' => 'required|string|max:100',
             'category' => 'required|string|max:255',
             'quantity' => 'required|integer|min:0',
             'unit' => 'nullable|string|max:50',
-            'threshold' => 'required|integer|min:0',
+            'restock_level' => 'required|integer|min:0',
         ]);
 
         $existingItem = InventoryItem::whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])
-            ->where('item_condition', $validated['item_condition'])
             ->first();
 
         if ($existingItem) {
             $newQuantity = $existingItem->quantity + $validated['quantity'];
-            $status = $newQuantity <= $existingItem->threshold ? 'Low Stock' : 'Available';
+            $status = $newQuantity <= $existingItem->restock_level ? 'Low Stock' : 'Available';
             if ($newQuantity == 0) {
-                $status = 'Depleted';
+                $status = 'Unavailable';
             }
             
             $existingItem->update([
@@ -72,9 +83,9 @@ class InventoryController extends Controller
             return response()->json($existingItem, 200);
         }
 
-        $status = $validated['quantity'] <= $validated['threshold'] ? 'Low Stock' : 'Available';
+        $status = $validated['quantity'] <= $validated['restock_level'] ? 'Low Stock' : 'Available';
         if ($validated['quantity'] == 0) {
-            $status = 'Depleted';
+            $status = 'Unavailable';
         }
 
         $item = InventoryItem::create(array_merge($validated, ['status' => $status]));
@@ -105,18 +116,16 @@ class InventoryController extends Controller
         $item = InventoryItem::findOrFail($id);
 
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'item_condition' => 'sometimes|required|string|max:255',
+            'name' => 'sometimes|required|string|max:100',
             'category' => 'sometimes|required|string|max:255',
             'quantity' => 'sometimes|required|integer|min:0',
             'unit' => 'nullable|string|max:50',
-            'threshold' => 'sometimes|required|integer|min:0',
+            'restock_level' => 'sometimes|required|integer|min:0',
         ]);
 
         // Check if the user is correcting a typo and it matches an existing item
         if (isset($validated['name'])) {
             $existingItem = InventoryItem::whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])
-                ->where('item_condition', $validated['item_condition'] ?? $item->item_condition)
                 ->where('id', '!=', $item->id)
                 ->first();
 
@@ -127,8 +136,8 @@ class InventoryController extends Controller
                 
                 // Add the quantities together
                 $newQuantity = $existingItem->quantity + ($validated['quantity'] ?? $item->quantity);
-                $status = $newQuantity <= $existingItem->threshold ? 'Low Stock' : 'Available';
-                if ($newQuantity == 0) $status = 'Depleted';
+                $status = $newQuantity <= $existingItem->restock_level ? 'Low Stock' : 'Available';
+                if ($newQuantity == 0) $status = 'Unavailable';
 
                 $existingItem->update([
                     'quantity' => $newQuantity,
@@ -150,16 +159,16 @@ class InventoryController extends Controller
             }
         }
 
-        if (isset($validated['quantity']) && isset($validated['threshold'])) {
-            $status = $validated['quantity'] <= $validated['threshold'] ? 'Low Stock' : 'Available';
+        if (isset($validated['quantity']) && isset($validated['restock_level'])) {
+            $status = $validated['quantity'] <= $validated['restock_level'] ? 'Low Stock' : 'Available';
             if ($validated['quantity'] == 0) {
-                $status = 'Depleted';
+                $status = 'Unavailable';
             }
             $validated['status'] = $status;
         } elseif (isset($validated['quantity'])) {
-            $status = $validated['quantity'] <= $item->threshold ? 'Low Stock' : 'Available';
+            $status = $validated['quantity'] <= $item->restock_level ? 'Low Stock' : 'Available';
             if ($validated['quantity'] == 0) {
-                $status = 'Depleted';
+                $status = 'Unavailable';
             }
             $validated['status'] = $status;
         }
@@ -186,6 +195,13 @@ class InventoryController extends Controller
         return response()->json(null, 204);
     }
 
+    public function restore($id)
+    {
+        $item = InventoryItem::withTrashed()->findOrFail($id);
+        $item->restore();
+        return response()->json($item);
+    }
+
     public function stockIn(Request $request, $id)
     {
         $item = InventoryItem::findOrFail($id);
@@ -208,7 +224,7 @@ class InventoryController extends Controller
         ]);
 
         $newQuantity = $item->quantity + $validated['quantity'];
-        $status = $newQuantity <= $item->threshold ? 'Low Stock' : 'Available';
+        $status = $newQuantity <= $item->restock_level ? 'Low Stock' : 'Available';
         $item->update(['quantity' => $newQuantity, 'status' => $status]);
 
         return response()->json($item);
@@ -259,8 +275,8 @@ class InventoryController extends Controller
         }
 
         $newQuantity = $item->quantity - $validated['quantity'];
-        $status = $newQuantity <= $item->threshold ? 'Low Stock' : 'Available';
-        if ($newQuantity == 0) $status = 'Depleted';
+        $status = $newQuantity <= $item->restock_level ? 'Low Stock' : 'Available';
+        if ($newQuantity == 0) $status = 'Unavailable';
         
         $item->update(['quantity' => $newQuantity, 'status' => $status]);
 
@@ -275,8 +291,45 @@ class InventoryController extends Controller
             $query->where('transaction_type', $request->type);
         }
 
+        if ($request->has('start_date') && !empty($request->start_date)) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->has('end_date') && !empty($request->end_date)) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        if ($request->has('remarks') && !empty($request->remarks)) {
+            $query->where('remarks', 'LIKE', '%' . $request->remarks . '%');
+        }
+
+        if ($request->has('category') && $request->category !== 'All' && !empty($request->category)) {
+            $query->whereHas('item', function($q) use ($request) {
+                $q->where('category', $request->category);
+            });
+        }
+
+        if ($request->has('paginate') && $request->paginate === 'false') {
+            return response()->json(['data' => $query->get()]);
+        }
+
         return response()->json($query->paginate(20));
     }
+
+    public function remarksSuggestions(Request $request)
+    {
+        $query = \App\Models\InventoryTransaction::where('transaction_type', 'out')
+                                                 ->whereNotNull('remarks')
+                                                 ->where('remarks', '!=', '');
+        
+        if ($request->has('q') && !empty($request->q)) {
+            $query->where('remarks', 'LIKE', '%' . $request->q . '%');
+        }
+
+        $suggestions = $query->distinct()->pluck('remarks')->take(10);
+        return response()->json(['data' => $suggestions]);
+    }
+
     public function bulkUpload(Request $request)
     {
         $request->validate([
@@ -287,30 +340,29 @@ class InventoryController extends Controller
         if (($handle = fopen($file->getRealPath(), 'r')) !== false) {
             $header = fgetcsv($handle, 1000, ',');
             
-            // Expected headers roughly: Name, Condition, Category, Quantity, Unit, Threshold
+            // Expected headers roughly: Name, Category, Quantity, Unit, Restock Level
             
             $addedCount = 0;
             $mergedCount = 0;
 
             while (($data = fgetcsv($handle, 1000, ',')) !== false) {
-                // Ensure row has minimum data (Name, Category, Quantity, Threshold)
+                // Ensure row has minimum data (Name, Category, Quantity, Restock Level)
                 if (count($data) < 4 || empty($data[0])) continue;
 
                 $name = trim($data[0]);
-                $condition = isset($data[1]) && !empty(trim($data[1])) ? trim($data[1]) : 'New';
-                $category = isset($data[2]) && !empty(trim($data[2])) ? trim($data[2]) : 'Medical Supplies';
-                $quantity = isset($data[3]) ? (int)trim($data[3]) : 0;
-                $unit = isset($data[4]) && !empty(trim($data[4])) ? trim($data[4]) : 'pcs';
-                $threshold = isset($data[5]) ? (int)trim($data[5]) : 10;
+                // Shifted indexes since Condition is removed
+                $category = isset($data[1]) && !empty(trim($data[1])) ? trim($data[1]) : 'Medical Supplies';
+                $quantity = isset($data[2]) ? (int)trim($data[2]) : 0;
+                $unit = isset($data[3]) && !empty(trim($data[3])) ? trim($data[3]) : 'pcs';
+                $restock_level = isset($data[4]) ? (int)trim($data[4]) : 10;
 
                 $existingItem = InventoryItem::whereRaw('LOWER(name) = ?', [strtolower($name)])
-                    ->where('item_condition', $condition)
                     ->first();
 
                 if ($existingItem) {
                     $newQuantity = $existingItem->quantity + $quantity;
-                    $status = $newQuantity <= $existingItem->threshold ? 'Low Stock' : 'Available';
-                    if ($newQuantity == 0) $status = 'Depleted';
+                    $status = $newQuantity <= $existingItem->restock_level ? 'Low Stock' : 'Available';
+                    if ($newQuantity == 0) $status = 'Unavailable';
                     
                     $existingItem->update([
                         'quantity' => $newQuantity,
@@ -331,16 +383,15 @@ class InventoryController extends Controller
                     }
                     $mergedCount++;
                 } else {
-                    $status = $quantity <= $threshold ? 'Low Stock' : 'Available';
-                    if ($quantity == 0) $status = 'Depleted';
+                    $status = $quantity <= $restock_level ? 'Low Stock' : 'Available';
+                    if ($quantity == 0) $status = 'Unavailable';
 
                     $item = InventoryItem::create([
                         'name' => $name,
-                        'item_condition' => $condition,
                         'category' => $category,
                         'quantity' => $quantity,
                         'unit' => $unit,
-                        'threshold' => $threshold,
+                        'restock_level' => $restock_level,
                         'status' => $status,
                     ]);
 

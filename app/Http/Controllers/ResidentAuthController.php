@@ -34,7 +34,6 @@ class ResidentAuthController extends Controller
             'address' => $request->address,
             'password' => Hash::make($request->password),
             'role' => 'resident',
-            'gps_enabled' => true,
         ]);
 
         $token = $resident->createToken('resident_auth_token')->plainTextToken;

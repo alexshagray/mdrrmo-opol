@@ -18,13 +18,13 @@ export default function Staff1Inventory() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [threshold, setThreshold] = useState('');
+  const [restockLevel, setRestockLevel] = useState('');
   const [status, setStatus] = useState('Available');
-  const [itemCondition, setItemCondition] = useState('New');
+
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAddItem = async () => {
-    if (!name || !category || !quantity || !threshold) {
+    if (!name || !category || !quantity || !restockLevel) {
       Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
@@ -35,9 +35,9 @@ export default function Staff1Inventory() {
         name,
         category,
         quantity: parseInt(quantity, 10),
-        threshold: parseInt(threshold, 10),
+        restock_level: parseInt(restockLevel, 10),
         status,
-        item_condition: itemCondition,
+
       });
 
       Alert.alert('Success', 'Inventory item added successfully!');
@@ -45,9 +45,8 @@ export default function Staff1Inventory() {
       setName('');
       setCategory('');
       setQuantity('');
-      setThreshold('');
+      setRestockLevel('');
       setStatus('Available');
-      setItemCondition('New');
     } catch (error) {
       Alert.alert('Error', 'Failed to add inventory item.');
     } finally {
@@ -113,34 +112,19 @@ export default function Staff1Inventory() {
             </View>
 
             <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.label}>Threshold</Text>
+              <Text style={styles.label}>Restock Level</Text>
               <TextInput
                 style={styles.input}
                 placeholder="0"
                 placeholderTextColor="#666"
                 keyboardType="numeric"
-                value={threshold}
-                onChangeText={setThreshold}
+                value={restockLevel}
+                onChangeText={setRestockLevel}
               />
             </View>
           </View>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Condition</Text>
-            <View style={styles.chipContainer}>
-              {['New', 'Good', 'Fair', 'Poor'].map((cond) => (
-                <TouchableOpacity
-                  key={cond}
-                  style={[styles.chip, itemCondition === cond && styles.chipActive]}
-                  onPress={() => setItemCondition(cond)}
-                >
-                  <Text style={[styles.chipText, itemCondition === cond && styles.chipTextActive]}>
-                    {cond}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Status</Text>

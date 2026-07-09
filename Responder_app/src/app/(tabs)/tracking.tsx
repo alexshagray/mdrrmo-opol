@@ -81,7 +81,6 @@ export default function TrackingScreen() {
     ? params.isRegistered === 'true' 
     : (parsedCallerInfo ? true : false);
   const isNearAccident = params.isNearAccident === 'true' || !parsedCallerInfo;
-  const gpsEnabled = params.gpsEnabled === 'true' || !parsedCallerInfo;
   const passedCallerLocation = params.callerLocation ? JSON.parse(params.callerLocation as string) : null;
   const emergencyType = (params.emergencyType as string) || '';
   
@@ -797,7 +796,6 @@ export default function TrackingScreen() {
                               landmark: landmark,
                               callerType: callerType,
                               isRegistered: isRegistered ? 'true' : 'false',
-                              gpsEnabled: gpsEnabled ? 'true' : 'false',
                               callerLocation: passedCallerLocation ? JSON.stringify(passedCallerLocation) : '',
                             },
                           });

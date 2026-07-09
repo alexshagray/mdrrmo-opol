@@ -1,4 +1,4 @@
-Name,Condition,Category,Quantity,Unit,Threshold
+Name,Condition,Category,Quantity,Unit,Restock Level
 "Helmet",New,Equipment,14,pcs,5
 "Gloves",New,Equipment,6,pcs,5
 "Safety Shoes",New,Equipment,9,pcs,5

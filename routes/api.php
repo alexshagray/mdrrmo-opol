@@ -9,7 +9,7 @@ use App\Http\Controllers\PostEventController;
 use App\Http\Controllers\SystemNotificationController;
 use App\Http\Controllers\TwilioCallController;
 use App\Http\Controllers\PatientCareReportController;
-use App\Http\Controllers\IncidentReportController;
+use App\Http\Controllers\IncidentDetailController;
 use App\Http\Controllers\TrainedPersonnelController;
 use App\Http\Controllers\ResponderController;
 use App\Http\Controllers\ResidentController;
@@ -35,13 +35,13 @@ Route::get('/patient_care_reports', [PatientCareReportController::class, 'index'
 Route::delete('/patient_care_reports/{id}', [PatientCareReportController::class, 'destroy']);
 Route::put('/patient_care_reports/{id}', [PatientCareReportController::class, 'update']);
 
-Route::get('/incidents', [IncidentReportController::class, 'index']);
-Route::get('/map/incidents', [IncidentReportController::class, 'mapIncidents']);
-Route::delete('/incident_reports', [IncidentReportController::class, 'destroyAll']);
-Route::delete('/incident_reports/{id}', [IncidentReportController::class, 'destroy']);
-Route::put('/incident_reports/{id}/caller', [IncidentReportController::class, 'updateCallerName']);
+Route::get('/incidents', [IncidentDetailController::class, 'index']);
+Route::get('/map/incidents', [IncidentDetailController::class, 'mapIncidents']);
+Route::delete('/incident_details', [IncidentDetailController::class, 'destroyAll']);
+Route::delete('/incident_details/{id}', [IncidentDetailController::class, 'destroy']);
+Route::put('/incident_details/{id}/caller', [IncidentDetailController::class, 'updateCallerName']);
 
-Route::get('/dispatch_reports', [App\Http\Controllers\DispatchReportController::class, 'index']);
+Route::get('/responder_logs', [App\Http\Controllers\ResponderLogController::class, 'index']);
 
 // Public Routes for Mobile App (PCR submission)
 Route::post('/patient_care_reports', [PatientCareReportController::class, 'store']);
@@ -60,8 +60,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/residents/search', [ResidentController::class, 'search']);
     
     // Incident dispatches and patient reports (secured under auth)
-    Route::post('/incident_reports', [IncidentReportController::class, 'store']);
-    Route::post('/dispatch_reports', [App\Http\Controllers\DispatchReportController::class, 'store']);
+    Route::post('/incident_details', [IncidentDetailController::class, 'store']);
+    Route::post('/responder_logs', [App\Http\Controllers\ResponderLogController::class, 'store']);
 });
 
 // Responder List
@@ -69,8 +69,10 @@ Route::get('/responders', [ResponderController::class, 'index']);
 
 // Staff 1 Inventory Routes
 Route::get('inventory/transactions', [InventoryController::class, 'transactions']);
+Route::get('inventory/remarks-suggestions', [InventoryController::class, 'remarksSuggestions']);
 Route::post('inventory/{id}/stock-in', [InventoryController::class, 'stockIn']);
 Route::post('inventory/{id}/distribute', [InventoryController::class, 'distribute']);
+Route::post('inventory/{id}/restore', [InventoryController::class, 'restore']);
 Route::post('inventory/bulk-upload', [InventoryController::class, 'bulkUpload']);
 Route::apiResource('inventory', InventoryController::class);
 

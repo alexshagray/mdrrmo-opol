@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class IncidentReport extends Model
+class IncidentDetail extends Model
 {
     use SoftDeletes;
 
@@ -15,7 +15,7 @@ class IncidentReport extends Model
         'user_id',
         'incident_id',
 
-        'call_id',
+
         'emergency_type_id',
         'caller_type',
         'status',

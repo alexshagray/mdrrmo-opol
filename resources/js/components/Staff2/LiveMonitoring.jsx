@@ -226,10 +226,10 @@ export default function LiveMonitoring({ responders }) {
     }
   });
 
-  const { data: dispatchReportsData } = useQuery({
-    queryKey: ['dispatchReports'],
+  const { data: responderLogsData } = useQuery({
+    queryKey: ['responderLogs'],
     queryFn: async () => {
-      const response = await fetch('/api/dispatch_reports');
+      const response = await fetch('/api/responder_logs');
       return response.json();
     }
   });
@@ -237,7 +237,7 @@ export default function LiveMonitoring({ responders }) {
   const mapIncidents = mapIncidentsData || [];
   const incidents = incidentsData?.data || [];
 
-  const dispatchReports = dispatchReportsData || [];
+  const responderLogs = responderLogsData || [];
 
   const emergencyTypes = emergencyTypesData || [];
   
@@ -454,10 +454,10 @@ export default function LiveMonitoring({ responders }) {
             />
           </Source>
 
-          {/* Render Dispatch Reports */}
-          {dispatchReports.map((report) => {
-            // Do not show rejected dispatch reports on the map
-            if (report.status_note && report.status_note.toLowerCase() === 'rejected') return null;
+          {/* Render Responder Logs */}
+          {responderLogs.map((report) => {
+            // Do not show rejected reports on the map
+            if (report.status && report.status.toLowerCase() === 'rejected') return null;
 
             // Check if responder is currently active and actively responding
             const activeResp = Object.values(responders).find(
@@ -489,7 +489,7 @@ export default function LiveMonitoring({ responders }) {
                   <div style={markerStyle('#0a84ff')}>🎯</div>
                   <div className="bg-[#111116]/90 backdrop-blur-sm border border-[#0a84ff] text-white text-[10px] font-bold px-2 py-1 rounded mt-1 shadow-[0_4px_12px_rgba(10,132,255,0.4)] whitespace-nowrap z-50">
                     Dispatch Loc: {report.responder?.first_name || `Resp ${report.responder_id}`}
-                    <span className="text-[#0a84ff] ml-1.5">• {report.status_note || 'Assigned'}</span>
+                    <span className="text-[#0a84ff] ml-1.5">• {report.status || 'Assigned'}</span>
                   </div>
                 </div>
               </Marker>
@@ -539,11 +539,11 @@ export default function LiveMonitoring({ responders }) {
               destLng = parseFloat(resp.destLongitude);
             }
             
-            // Fallback to checking dispatch reports
+            // Fallback to checking responder logs
             if (destLat === null || destLng === null || destLat === 0 || destLng === 0) {
-              const matchingDispatch = dispatchReports.find(
+              const matchingDispatch = responderLogs.find(
                 (r) => r.responder_id?.toString() === resp.responderId?.toString() &&
-                       (!r.status_note || r.status_note.toLowerCase() !== 'rejected')
+                       (!r.status || r.status.toLowerCase() !== 'rejected')
               );
 
               if (matchingDispatch && !isNaN(parseFloat(matchingDispatch.latitude))) {
@@ -698,7 +698,7 @@ export default function LiveMonitoring({ responders }) {
                 <div className="flex flex-col gap-1.5 text-xs text-gray-300">
                   <p className="m-0"><strong>Responder:</strong> {selectedDispatch.responder?.first_name || 'ID ' + selectedDispatch.responder_id}</p>
                   <p className="m-0"><strong>Incident:</strong> {selectedDispatch.incident_id || 'N/A'}</p>
-                  <p className="m-0 text-[#0a84ff] font-semibold mt-1">Status: {selectedDispatch.status_note || 'En route'}</p>
+                  <p className="m-0 text-[#0a84ff] font-semibold mt-1">Status: {selectedDispatch.status || 'En route'}</p>
                   <p className="m-0 text-[10px] text-gray-500 mt-1">{new Date(selectedDispatch.report_date).toLocaleString()}</p>
                 </div>
               </div>

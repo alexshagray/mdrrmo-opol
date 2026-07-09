@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PatientCareReport;
 use App\Models\User;
-use App\Models\IncidentReport;
+use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -79,7 +79,7 @@ class PatientCareReportController extends Controller
             }
 
             // Create Incident First
-            $incident = IncidentReport::create([
+            $incident = IncidentDetail::create([
                 'user_id' => $patientUser->id,
                 'incident_id' => $incidentId,
                 'emergency_type' => $data['emergency_type'] ?? 'Not specified',

@@ -3,7 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use App\Models\IncidentReport;
+use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
 use App\Models\PatientCareReport;
 use App\Models\InventoryItem;
@@ -108,7 +108,7 @@ class DatabaseSeeder extends Seeder
 
         // 5. Create Incident Reports with accurate coordinates inside Opol Municipal Bounds
         // Opol Coordinates Reference: Latitude 8.5200 - 8.5300 | Longitude 124.5700 - 124.5800
-        $incident1 = IncidentReport::create([
+        $incident1 = IncidentDetail::create([
             'user_id' => $responder->id,
             'incident_id' => 'INC-1001',
             'emergency_type_id' => 1,
@@ -122,7 +122,7 @@ class DatabaseSeeder extends Seeder
             'longitude' => 124.57650000,
         ]);
 
-        $incident2 = IncidentReport::create([
+        $incident2 = IncidentDetail::create([
             'user_id' => $responder->id,
             'incident_id' => 'INC-1002',
             'emergency_type_id' => 1,
@@ -136,7 +136,7 @@ class DatabaseSeeder extends Seeder
             'longitude' => 124.57900000,
         ]);
 
-        $incident3 = IncidentReport::create([
+        $incident3 = IncidentDetail::create([
             'user_id' => null, // Not yet claimed by a responder
             'incident_id' => 'INC-1003',
             'emergency_type_id' => 1,
@@ -150,7 +150,7 @@ class DatabaseSeeder extends Seeder
             'longitude' => 124.56800000,
         ]);
 
-        $incident4 = IncidentReport::create([
+        $incident4 = IncidentDetail::create([
             'user_id' => $responder->id,
             'incident_id' => 'INC-1004',
             'emergency_type_id' => 1,
@@ -301,7 +301,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'First Aid Kits (Standard)',
             'category' => 'Medical',
             'quantity' => 15,
-            'threshold' => 20,
+            'restock_level' => 20,
             'status' => 'Low Stock'
         ]);
 
@@ -309,7 +309,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Portable Oxygen Cylinders',
             'category' => 'Other',
             'quantity' => 8,
-            'threshold' => 10,
+            'restock_level' => 10,
             'status' => 'Low Stock'
         ]);
 
@@ -317,7 +317,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Ambulance Unit A',
             'category' => 'Vehicle',
             'quantity' => 1,
-            'threshold' => 1,
+            'restock_level' => 1,
             'status' => 'Available'
         ]);
 
@@ -325,7 +325,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Bandages (Box)',
             'category' => 'Medical',
             'quantity' => 50,
-            'threshold' => 10,
+            'restock_level' => 10,
             'status' => 'Available'
         ]);
 

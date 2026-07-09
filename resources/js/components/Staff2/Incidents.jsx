@@ -18,7 +18,7 @@ export default function Incidents({ setNotifications }) {
 
   const deleteIncidentMutation = useMutation({
     mutationFn: async (id) => {
-      const response = await fetch(`/api/incident_reports/${id}`, {
+      const response = await fetch(`/api/incident_details/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ export default function Incidents({ setNotifications }) {
 
   const editCallerMutation = useMutation({
     mutationFn: async ({ id, callerName }) => {
-      const response = await fetch(`/api/incident_reports/${id}/caller`, {
+      const response = await fetch(`/api/incident_details/${id}/caller`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -94,7 +94,7 @@ export default function Incidents({ setNotifications }) {
 
   const deleteAllIncidentsMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/incident_reports', {
+      const response = await fetch('/api/incident_details', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

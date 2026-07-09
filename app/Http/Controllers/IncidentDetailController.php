@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\IncidentReport;
+use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
-class IncidentReportController extends Controller
+class IncidentDetailController extends Controller
 {
     public function index(Request $request)
     {
-        $query = IncidentReport::with('user')->latest();
+        $query = IncidentDetail::with('user')->latest();
         
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -24,7 +24,7 @@ class IncidentReportController extends Controller
 
     public function mapIncidents()
     {
-        $incidents = IncidentReport::with('user')->latest()->get();
+        $incidents = IncidentDetail::with('user')->latest()->get();
         return response()->json($incidents);
     }
 
@@ -58,7 +58,7 @@ class IncidentReportController extends Controller
         $emergencyType = \App\Models\EmergencyType::where('name', 'like', "%{$typeString}%")->first();
         $typeId = $emergencyType ? $emergencyType->id : (\App\Models\EmergencyType::where('name', 'Other')->value('id') ?? 1);
 
-        $incident = IncidentReport::create([
+        $incident = IncidentDetail::create([
             'user_id' => $user ? $user->id : null,
             'incident_id' => 'INC-' . rand(10000, 99999),
             'emergency_type_id' => $typeId,
@@ -97,7 +97,7 @@ class IncidentReportController extends Controller
 
     public function destroy($id)
     {
-        $incident = IncidentReport::find($id);
+        $incident = IncidentDetail::find($id);
         if ($incident) {
             $incident->forceDelete();
             return response()->json([
@@ -113,7 +113,7 @@ class IncidentReportController extends Controller
 
     public function destroyAll()
     {
-        IncidentReport::truncate();
+        IncidentDetail::truncate();
         return response()->json([
             'success' => true,
             'message' => 'All Incident Reports deleted successfully'
@@ -122,7 +122,7 @@ class IncidentReportController extends Controller
 
     public function updateCallerName(Request $request, $id)
     {
-        $incident = IncidentReport::with('user')->find($id);
+        $incident = IncidentDetail::with('user')->find($id);
         if (!$incident || !$incident->user) {
             return response()->json(['success' => false, 'message' => 'Incident or Caller not found'], 404);
         }

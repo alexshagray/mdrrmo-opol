@@ -102,7 +102,7 @@ const Staff1App = () => {
   });
   
   const inventory = invData?.data || [];
-  const lowStockItemsCount = inventory.filter(i => i.status === 'Low Stock' || i.status === 'Out of Stock').length;
+  const lowStockItemsCount = inventory.filter(i => i.status === 'Low Stock' || i.status === 'Unavailable').length;
 
   if (!token) {
     return (
@@ -244,7 +244,7 @@ const Staff1App = () => {
         <Staff1Header activeSection={activeSection} />
 
         <div className="p-8 overflow-y-auto flex-1">
-          {(activeSection === 'inventory' || activeSection === 'equipment' || activeSection === 'alerts' || activeSection === 'reports') && <InventoryManager activeSection={activeSection} />}
+          {(activeSection === 'inventory' || activeSection === 'equipment' || activeSection === 'alerts' || activeSection === 'reports' || activeSection === 'consumption' || activeSection === 'consumption_supplies' || activeSection === 'consumption_equipment') && <InventoryManager activeSection={activeSection} setActiveSection={setActiveSection} />}
           {activeSection === 'events' && (
             <EventsManager role="Staff1" />
           )}

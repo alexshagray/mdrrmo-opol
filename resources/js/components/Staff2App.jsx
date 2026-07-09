@@ -148,8 +148,8 @@ export default function Staff2App() {
       queryClient.invalidateQueries({ queryKey: ['mapIncidents'] });
     });
 
-    socket.on('dispatchReportUpdate', () => {
-      queryClient.invalidateQueries({ queryKey: ['dispatchReports'] });
+    socket.on('responderLogUpdate', () => {
+      queryClient.invalidateQueries({ queryKey: ['responderLogs'] });
     });
 
     return () => {

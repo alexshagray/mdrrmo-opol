@@ -41,7 +41,7 @@ export default function HomeScreen() {
   const [showBarangayModal, setShowBarangayModal] = useState(false);
 
   const [isNearAccident, setIsNearAccident] = useState(true);
-  const [gpsEnabled, setGpsEnabled] = useState(false);
+
   const [callerLocation, setCallerLocation] = useState<{ latitude: number, longitude: number } | null>(null);
   const [mapZoom, setMapZoom] = useState<number>(14);
 
@@ -151,7 +151,7 @@ export default function HomeScreen() {
           const parsed = await parseOpolLocation(locationText);
           setCallerLocation({ latitude: parsed.latitude, longitude: parsed.longitude });
           setMapZoom(parsed.zoom);
-          setGpsEnabled(true);
+
         } catch (error) {
           console.error("Location parsing failed", error);
         }
@@ -221,7 +221,7 @@ export default function HomeScreen() {
     setCallerNumber(data.resident_info.phone || 'Resident App');
     setIsRegistered(true);
     setCallerName(data.resident_info.name || 'Resident');
-    setGpsEnabled(true);
+
 
     if (data.location && data.location.latitude) {
       setCallerLocation({
@@ -257,7 +257,7 @@ export default function HomeScreen() {
     if (response.isRegistered && response.resident) {
       setIsRegistered(true);
       setCallerName(response.resident.full_name);
-      setGpsEnabled(response.resident.gps_enabled);
+
       if (response.resident.latitude && response.resident.longitude) {
         setCallerLocation({
           latitude: response.resident.latitude,
@@ -267,7 +267,7 @@ export default function HomeScreen() {
     } else {
       setIsRegistered(false);
       setCallerName('Visitor');
-      setGpsEnabled(false);
+
       setCallerLocation(null);
     }
 
@@ -297,7 +297,7 @@ export default function HomeScreen() {
         }),
         isRegistered: isRegistered ? 'true' : 'false',
         callerType: isRegistered ? 'Resident' : 'Visitor',
-        gpsEnabled: gpsEnabled ? 'true' : 'false',
+
         callerLocation: callerLocation ? JSON.stringify(callerLocation) : '',
         barangay: barangay,
         purok: purok,
@@ -565,15 +565,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  {/* GPS Warning Indicator */}
-                  {(!gpsEnabled) && (
-                    <View style={styles.warningBox}>
-                      <Ionicons name="warning" size={18} color="#ffcc00" style={{ marginRight: 8 }} />
-                      <Text style={styles.warningText}>
-                        Caller GPS not detected. Please ask for location and pin it on the map.
-                      </Text>
-                    </View>
-                  )}
+
 
                   {/* Barangay Dropdown */}
                   <View style={styles.inputGroup}>
@@ -644,7 +636,7 @@ export default function HomeScreen() {
                       initialZoom={mapZoom}
                       onLocationSelected={(coords) => {
                         setCallerLocation(coords);
-                        setGpsEnabled(true);
+
                       }}
                     />
                   </View>

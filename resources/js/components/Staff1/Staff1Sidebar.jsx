@@ -48,7 +48,7 @@ export default function Staff1Sidebar({ activeSection, setActiveSection, lowStoc
                 className={`flex items-center justify-start px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${activeSection === 'inventory' ? 'text-[#0a84ff] bg-[#181822] shadow-[inset_2px_0_0_#0a84ff]' : 'text-gray-500 hover:text-gray-300 hover:bg-[#181822]'}`}
                 onClick={() => setActiveSection('inventory')}
               >
-                Medical Supplies
+                Supplies
               </button>
               <button
                 className={`flex items-center justify-start px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${activeSection === 'equipment' ? 'text-[#0a84ff] bg-[#181822] shadow-[inset_2px_0_0_#0a84ff]' : 'text-gray-500 hover:text-gray-300 hover:bg-[#181822]'}`}
@@ -59,26 +59,36 @@ export default function Staff1Sidebar({ activeSection, setActiveSection, lowStoc
             </div>
           </div>
           
-          <button
-            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${activeSection === 'alerts' ? 'bg-gradient-to-r from-[rgba(255,159,10,0.15)] to-[rgba(255,159,10,0.05)] text-[#ff9f0a] border border-[#ff9f0a]/30 shadow-[inset_4px_0_0_#ff9f0a]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
-            onClick={() => setActiveSection('alerts')}
-          >
-            <span className="flex items-center gap-3">
-              <span className="text-lg">⚠️</span>
-              Low Stock Alerts
-            </span>
-            {lowStockItemsCount > 0 && <span className="bg-[#ff453a] text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-[0_0_10px_rgba(255,69,58,0.5)]">{lowStockItemsCount}</span>}
-          </button>
 
-          <button
-            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${activeSection === 'reports' ? 'bg-gradient-to-r from-[rgba(10,132,255,0.15)] to-[rgba(10,132,255,0.05)] text-[#0a84ff] border border-[#0a84ff]/30 shadow-[inset_4px_0_0_#0a84ff]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
-            onClick={() => setActiveSection('reports')}
-          >
-            <span className="flex items-center gap-3">
-              <span className="text-lg">📊</span>
-              Inventory Reports
-            </span>
-          </button>
+
+
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => setActiveSection('consumption_supplies')}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${(activeSection.startsWith('consumption')) ? 'bg-gradient-to-r from-[rgba(10,132,255,0.15)] to-[rgba(10,132,255,0.05)] text-[#0a84ff] border border-[#0a84ff]/30 shadow-[inset_4px_0_0_#0a84ff]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
+            >
+              <span className="flex items-center gap-3">
+                <span className="text-lg">📉</span>
+                Consumption Report
+              </span>
+              <span className={`text-[10px] transition-transform duration-300 ${(activeSection.startsWith('consumption')) ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            
+            <div className={`flex flex-col gap-1 pl-10 overflow-hidden transition-all duration-300 ${(activeSection.startsWith('consumption')) ? 'max-h-40 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+              <button
+                className={`flex items-center justify-start px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${(activeSection === 'consumption_supplies' || activeSection === 'consumption') ? 'text-[#0a84ff] bg-[#181822] shadow-[inset_2px_0_0_#0a84ff]' : 'text-gray-500 hover:text-gray-300 hover:bg-[#181822]'}`}
+                onClick={() => setActiveSection('consumption_supplies')}
+              >
+                Consumption Supplies Report
+              </button>
+              <button
+                className={`flex items-center justify-start px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${activeSection === 'consumption_equipment' ? 'text-[#0a84ff] bg-[#181822] shadow-[inset_2px_0_0_#0a84ff]' : 'text-gray-500 hover:text-gray-300 hover:bg-[#181822]'}`}
+                onClick={() => setActiveSection('consumption_equipment')}
+              >
+                Consumption Equipment Report
+              </button>
+            </div>
+          </div>
 
           <div className="mt-6 mb-2 px-4">
             <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">POST-EVENTS</span>

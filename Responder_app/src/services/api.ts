@@ -148,6 +148,8 @@ export const registerUser = async (name: string, email: string, password: string
   }
 };
 
+import { disconnectSocket } from './socket';
+
 export const logoutUser = async () => {
   try {
     await apiClient.post('/logout');
@@ -155,6 +157,7 @@ export const logoutUser = async () => {
     console.warn('Backend logout failed, proceeding with local token wipe anyway.');
   } finally {
     await deleteStorageItem('auth_token');
+    disconnectSocket();
   }
 };
 
@@ -218,10 +221,9 @@ export const checkResidentDatabase = async (phoneNumber: string) => {
         resident: {
           full_name: 'Juan Dela Cruz',
           phone_number: '+639500905679',
-          latitude: 14.5995,
-          longitude: 120.9842,
-          address: 'Purok 3, Barangay Poblacion, Opol, Misamis Oriental',
-          gps_enabled: true
+          latitude: 8.5200,
+          longitude: 124.5765,
+          address: 'Purok 3, Barangay Poblacion, Opol, Misamis Oriental'
         }
       };
     }
@@ -241,7 +243,7 @@ export const fetchIncidents = async () => {
 
 export const reportIncident = async (data: IncidentPayload) => {
   try {
-    const response = await apiClient.post('/incident_reports', data);
+    const response = await apiClient.post('/incident_details', data);
     return response.data;
   } catch (error) {
     console.warn('Error reporting incident (falling back to simulation):', error);
@@ -255,7 +257,7 @@ export const reportIncident = async (data: IncidentPayload) => {
 
 export const deleteIncident = async (id: number) => {
   try {
-    const response = await apiClient.delete(`/incident_reports/${id}`);
+    const response = await apiClient.delete(`/incident_details/${id}`);
     return response.data;
   } catch (error) {
     console.warn('Error deleting incident (falling back to simulation):', error);

@@ -5,7 +5,7 @@ const wb = XLSX.readFile('occ-initial-data.xlsx');
 const sheet = wb.Sheets[wb.SheetNames[0]];
 const data = XLSX.utils.sheet_to_json(sheet, {header: 1});
 
-let csvContent = 'Name,Condition,Category,Quantity,Unit,Threshold\n';
+let csvContent = 'Name,Condition,Category,Quantity,Unit,Restock Level\n';
 
 for (let i = 4; i < data.length; i++) {
     const row = data[i];

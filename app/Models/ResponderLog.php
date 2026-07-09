@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class DispatchReport extends Model
+class ResponderLog extends Model
 {
     use SoftDeletes;
 
@@ -14,7 +14,7 @@ class DispatchReport extends Model
         'incident_id',
         'latitude',
         'longitude',
-        'status_note',
+        'status',
         'report_date',
     ];
 

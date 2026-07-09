@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Twilio\TwiML\VoiceResponse;
-use App\Models\IncidentReport;
+use App\Models\IncidentDetail;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
@@ -81,10 +81,10 @@ class TwilioCallController extends Controller
         }
 
         // Auto-create incident
-        $incident = IncidentReport::create([
+        $incident = IncidentDetail::create([
             'user_id' => $resident ? $resident->id : null,
             'incident_id' => 'INC-' . strtoupper(uniqid()),
-            'call_id' => $callSid,
+
             'caller_type' => $callerType,
             'status' => 'active',
             'report_date' => now(),
@@ -167,14 +167,13 @@ class TwilioCallController extends Controller
                     'phone_number' => $resident->phone_number,
                     'latitude' => null,
                     'longitude' => null,
-                    'gps_enabled' => $resident->gps_enabled,
                     'address' => $resident->address
                 ]
             ]);
         }
 
         // If not registered, check if they called before (Incident Reports history)
-        $pastIncident = IncidentReport::where('caller_number', 'LIKE', '%' . substr($cleanPhone, -10))
+        $pastIncident = IncidentDetail::where('caller_number', 'LIKE', '%' . substr($cleanPhone, -10))
             ->whereNotNull('caller_name')
             ->orderBy('created_at', 'desc')
             ->first();
@@ -187,7 +186,6 @@ class TwilioCallController extends Controller
                     'phone_number' => $phone,
                     'latitude' => $pastIncident->latitude,
                     'longitude' => $pastIncident->longitude,
-                    'gps_enabled' => false,
                     'address' => $pastIncident->location ?? 'Previous Caller Location'
                 ]
             ]);
@@ -203,7 +201,7 @@ class TwilioCallController extends Controller
             'longitude' => 'required|numeric',
         ]);
 
-        $incident = IncidentReport::find($id);
+        $incident = IncidentDetail::find($id);
         if (!$incident) {
             return response()->json(['success' => false, 'message' => 'Incident not found'], 404);
         }

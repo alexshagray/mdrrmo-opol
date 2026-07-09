@@ -39,7 +39,7 @@ class PatientCareReport extends Model
     }
     public function incident(): BelongsTo
     {
-        return $this->belongsTo(IncidentReport::class, 'incident_id', 'incident_id');
+        return $this->belongsTo(IncidentDetail::class, 'incident_id', 'incident_id');
     }
 
     public function getFullNameAttribute()

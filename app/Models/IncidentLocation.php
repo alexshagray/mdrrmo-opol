@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class IncidentLocation extends Model
 {
     protected $fillable = [
-        'incident_report_id',
+        'incident_detail_id',
         'latitude',
         'longitude',
         'location',
@@ -24,6 +24,6 @@ class IncidentLocation extends Model
 
     public function report(): BelongsTo
     {
-        return $this->belongsTo(IncidentReport::class, 'incident_report_id');
+        return $this->belongsTo(IncidentDetail::class, 'incident_detail_id');
     }
 }

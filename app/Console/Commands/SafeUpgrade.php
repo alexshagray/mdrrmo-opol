@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Models\Department;
 use App\Models\InventoryItem;
 use App\Models\SystemNotification;
-use App\Models\IncidentReport;
+use App\Models\IncidentDetail;
 use App\Models\IncidentLocation;
 use App\Models\PatientCareReport;
 use App\Models\EmergencyType;
