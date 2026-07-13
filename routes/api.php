@@ -6,7 +6,6 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PostEventController;
-use App\Http\Controllers\SystemNotificationController;
 use App\Http\Controllers\TwilioCallController;
 use App\Http\Controllers\PatientCareRecordController;
 use App\Http\Controllers\IncidentDetailController;
@@ -16,6 +15,7 @@ use App\Http\Controllers\ResidentController;
 use App\Http\Controllers\EmergencyTypeController;
 
 Route::get('/emergency_types', [EmergencyTypeController::class, 'index']);
+Route::post('/emergency_types', [EmergencyTypeController::class, 'store']);
 Route::get('/barangays', [App\Http\Controllers\BarangayController::class, 'index']);
 
 use App\Models\User;
@@ -42,6 +42,7 @@ Route::delete('/incident_details', [IncidentDetailController::class, 'destroyAll
 Route::delete('/incident_details/{id}', [IncidentDetailController::class, 'destroy']);
 Route::put('/incident_details/{id}/caller', [IncidentDetailController::class, 'updateCallerName']);
 Route::put('/incident_details/{id}/status', [IncidentDetailController::class, 'updateStatus']);
+Route::put('/incident_details/{id}/location', [IncidentDetailController::class, 'updateLocation']);
 
 Route::get('/responder_logs', [App\Http\Controllers\ResponderLogController::class, 'index']);
 
@@ -78,10 +79,12 @@ Route::post('inventory/{id}/restore', [InventoryController::class, 'restore']);
 Route::post('inventory/bulk-upload', [InventoryController::class, 'bulkUpload']);
 Route::apiResource('inventory', InventoryController::class);
 
+Route::get('/notifications', function () {
+    return response()->json([]);
+});
+
 // Post Events & Notifications
 Route::apiResource('post_events', PostEventController::class);
-Route::get('/notifications', [SystemNotificationController::class, 'index']);
-Route::post('/notifications', [SystemNotificationController::class, 'store']);
 
 
 // Trained Personnel CRUD

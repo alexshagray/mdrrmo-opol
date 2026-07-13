@@ -13,7 +13,7 @@ class InventoryTransaction extends Model
         'inventory_batch_id',
         'inventory_item_id',
         'transaction_type',
-        'quantity',
+        'quantity_moved',
         'remarks'
     ];
 

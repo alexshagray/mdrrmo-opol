@@ -90,6 +90,10 @@ export default function Staff1Header({ activeSection }) {
   const sectionTitles = {
     'dashboard': 'Overview Dashboard',
     'inventory': 'Assets & Supplies Management',
+    'equipment': 'Assets & Supplies Management',
+    'consumption_supplies': 'Consumption Supplies Report',
+    'consumption_equipment': 'Equipment Report',
+    'pcr': 'Patient Care Records',
     'alerts': 'Inventory Alerts',
     'events': 'Manage Post-Events',
     'trained_personnel': 'Trained Personnel List',

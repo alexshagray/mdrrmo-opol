@@ -117,7 +117,13 @@ export default function PCRScreen() {
   useEffect(() => {
     const loadDraft = async () => {
       try {
-        const draftStr = await FileSystem.readAsStringAsync(FileSystem.documentDirectory + 'pcr_draft_data.txt');
+        const fileUri = FileSystem.documentDirectory + 'pcr_draft_data.txt';
+        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+        if (!fileInfo.exists) {
+          setIsDraftLoaded(true);
+          return;
+        }
+        const draftStr = await FileSystem.readAsStringAsync(fileUri);
         if (draftStr) {
           const draft = JSON.parse(draftStr);
           if (draft.step) setStep(draft.step);
@@ -391,9 +397,9 @@ export default function PCRScreen() {
               {searchResults.length > 0 && (
                 <View style={styles.dropdownResults}>
                   {searchResults.map((res, i) => (
-                    <TouchableOpacity key={i} style={styles.dropdownItem} onPress={() => selectResident(res)}>
-                      <Text style={{fontWeight: 'bold'}}>{res.first_name} {res.last_name}</Text>
-                      <Text style={{fontSize: 12, color: '#666'}}>{res.phone_number}</Text>
+                    <TouchableOpacity key={i} style={[styles.dropdownItem, { backgroundColor: '#1a1a24', marginHorizontal: 8, marginTop: 8, borderRadius: 12, borderBottomWidth: 0, borderWidth: 1, borderColor: '#2b2b36' }]} onPress={() => selectResident(res)}>
+                      <Text style={{fontWeight: '800', color: '#ffffff', fontSize: 16}}>{res.first_name} {res.last_name}</Text>
+                      <Text style={{fontSize: 13, color: '#0a84ff', marginTop: 4, fontWeight: '600'}}>{res.phone_number}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>

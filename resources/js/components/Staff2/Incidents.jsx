@@ -6,9 +6,9 @@ export default function Incidents({ setNotifications }) {
   const queryClient = useQueryClient();
 
   const { data: incidentsData, isLoading } = useQuery({
-    queryKey: ['incidents', 'completed', incidentPage],
+    queryKey: ['incidents', 'all', incidentPage],
     queryFn: async () => {
-      const response = await fetch(`/api/incidents?page=${incidentPage}&status=completed`);
+      const response = await fetch(`/api/incidents?page=${incidentPage}`);
       return response.json();
     },
     keepPreviousData: true
@@ -156,6 +156,7 @@ export default function Incidents({ setNotifications }) {
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Phone Number</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Location</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Date/Time Reported</th>
+                <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Status</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35] rounded-tr-lg">Actions</th>
               </tr>
             </thead>
@@ -178,6 +179,15 @@ export default function Incidents({ setNotifications }) {
                   </td>
                   <td className="p-4 border-b border-[#1f1f26] text-gray-400 text-xs">
                     {typeof incident.created_at === 'string' ? new Date(incident.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : (incident.created_at || new Date().toLocaleString())}
+                  </td>
+                  <td className="p-4 border-b border-[#1f1f26]">
+                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                      (incident.status || '').toLowerCase() === 'completed' ? 'bg-[#34c759]/10 text-[#34c759] border border-[#34c759]/30' :
+                      (incident.status || '').toLowerCase() === 'rejected' ? 'bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30' :
+                      'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30'
+                    }`}>
+                      {incident.status || 'Active'}
+                    </span>
                   </td>
                   <td className="p-4 border-b border-[#1f1f26]">
                     <div className="flex gap-2">

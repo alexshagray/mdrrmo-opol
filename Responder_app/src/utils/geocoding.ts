@@ -13,7 +13,7 @@ const CACHE_PREFIX = 'GEOCODE_CACHE_';
 /**
  * Clean up strings for cache key
  */
-const getCacheKey = (address: string) => `${CACHE_PREFIX}${address.trim().toLowerCase()}`;
+const getCacheKey = (address: string) => `${CACHE_PREFIX}${address.trim().toLowerCase().replace(/[^a-z0-9.\-_]/g, '_')}`;
 
 /**
  * Safely get cached coordinates
@@ -90,28 +90,31 @@ const buildAddressFallbacks = (params: {
 };
 
 /**
- * Calls the Mapbox API to fetch coordinates for a given search query
+ * Calls the Google Maps Geocoding API to fetch coordinates for a given search query
  */
-const fetchMapboxGeocode = async (searchQuery: string): Promise<Coordinate | null> => {
-  const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || DEFAULT_MAPBOX_TOKEN;
+const fetchGoogleGeocode = async (searchQuery: string): Promise<Coordinate | null> => {
+  const token = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!token) {
+    console.warn('Google Maps API key is missing.');
+    return null;
+  }
   
-  // Using the Mapbox Geocoding v5 API
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${token}&limit=1&country=ph`;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(searchQuery)}&components=country:PH&key=${token}`;
   
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`Mapbox API error: ${response.status}`);
+      throw new Error(`Google Maps API error: ${response.status}`);
     }
     const data = await response.json();
     
-    if (data.features && data.features.length > 0) {
-      const [longitude, latitude] = data.features[0].center;
-      return { latitude, longitude };
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      const location = data.results[0].geometry.location;
+      return { latitude: location.lat, longitude: location.lng };
     }
     return null;
   } catch (error) {
-    console.warn(`Mapbox geocoding failed for: ${searchQuery}`, error);
+    console.warn(`Google geocoding failed for: ${searchQuery}`, error);
     return null;
   }
 };
@@ -158,11 +161,14 @@ export const robustGeocode = async (
       );
     }
 
-    if (!match && barangay && !purok) {
+    if (!match && barangay) {
       match = ALL_LOCATIONS.find(loc => 
         loc.type === 'barangay' &&
         loc.name.toLowerCase() === barangay.toLowerCase()
       );
+      if (match && purok) {
+        console.log(`[Geocoding] Purok not found locally. Falling back to Local Barangay: ${match.name}`);
+      }
     }
 
     if (match) {
@@ -176,8 +182,9 @@ export const robustGeocode = async (
   // 4. Try geocoding the exact string provided
   let result = null;
   if (mainQuery) {
-    result = await fetchMapboxGeocode(mainQuery);
+    result = await fetchGoogleGeocode(mainQuery);
     if (result) {
+      console.log('[Geocoding] Exact Match Google Geocoding:', mainQuery);
       await setCachedCoordinates(mainQuery, result);
       return result;
     }
@@ -190,7 +197,7 @@ export const robustGeocode = async (
       if (fallbackQuery.trim() === mainQuery.trim()) continue; // Skip if we already tried this exact string
       
       console.log(`[Geocoding] Falling back to: ${fallbackQuery}`);
-      result = await fetchMapboxGeocode(fallbackQuery);
+      result = await fetchGoogleGeocode(fallbackQuery);
       
       if (result) {
         // Cache the result for the original query too so we don't have to fallback next time
@@ -202,7 +209,7 @@ export const robustGeocode = async (
     // Basic fallback if no components are provided
     const fallbackQuery = `${mainQuery}, Opol, Misamis Oriental, Philippines`;
     console.log(`[Geocoding] Basic fallback to: ${fallbackQuery}`);
-    result = await fetchMapboxGeocode(fallbackQuery);
+    result = await fetchGoogleGeocode(fallbackQuery);
     if (result) {
       await setCachedCoordinates(mainQuery, result);
       return result;

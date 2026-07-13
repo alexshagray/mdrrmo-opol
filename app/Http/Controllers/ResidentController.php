@@ -18,6 +18,7 @@ class ResidentController extends Controller
             ->where(function($q) use ($query) {
                 $q->where('first_name', 'like', "%{$query}%")
                   ->orWhere('last_name', 'like', "%{$query}%")
+                  ->orWhere(\Illuminate\Support\Facades\DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$query}%")
                   ->orWhere('phone_number', 'like', "%{$query}%");
             })
             ->take(10)

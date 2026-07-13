@@ -117,7 +117,7 @@ export default function CallLogsScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerSubtitle}>AUTOMATIC INCIDENT LOGS</Text>
+            <Text style={styles.headerSubtitle}> INCIDENT LOGS</Text>
             <Text style={styles.headerText}>CALL LOGS</Text>
           </View>
           <TouchableOpacity onPress={loadCalls} style={styles.refreshButton}>

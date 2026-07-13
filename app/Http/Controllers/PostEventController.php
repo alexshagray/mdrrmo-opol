@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PostEvent;
-use App\Models\SystemNotification;
+// use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 
 class PostEventController extends Controller
@@ -31,13 +31,13 @@ class PostEventController extends Controller
         $event = PostEvent::create($validated);
 
         // Auto-generate global notification
-        SystemNotification::create([
-            'title' => 'New Event Scheduled: ' . $event->title,
-            'message' => 'A new event has been scheduled for ' . \Carbon\Carbon::parse($event->event_date)->format('M d, Y h:i A') . ' at ' . ($event->location ?? 'TBA') . '.',
-            'type' => 'event_alert',
-            'target' => 'all',
-            'related_id' => $event->id,
-        ]);
+        // SystemNotification::create([
+        //     'title' => 'New Event Scheduled: ' . $event->title,
+        //     'message' => 'A new event has been scheduled for ' . \Carbon\Carbon::parse($event->event_date)->format('M d, Y h:i A') . ' at ' . ($event->location ?? 'TBA') . '.',
+        //     'type' => 'event_alert',
+        //     'target' => 'all',
+        //     'related_id' => $event->id,
+        // ]);
 
         return response()->json($event, 201);
     }

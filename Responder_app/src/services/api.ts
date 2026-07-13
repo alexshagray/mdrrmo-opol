@@ -50,17 +50,17 @@ export const deleteStorageItem = async (key: string) => {
 
 // --- CHOOSE YOUR CONNECTION METHOD (Uncomment the one you want to use) ---
 
-// Option 1: Ngrok Tunnel (Works anywhere over the internet)
-const API_BASE_URL = 'https://overtone-luminance-monopoly.ngrok-free.dev/api';
+// Option 1: Localtunnel (Works anywhere over the internet)
+const API_BASE_URL = 'https://cyan-colts-slide.loca.lt/api';
 
 // Option 2: Local Wi-Fi Network (Requires phone and PC on same Wi-Fi)
-// const API_BASE_URL = Platform.OS === 'web' 
-//   ? 'http://127.0.0.1:8000/api' 
+// const API_BASE_URL = Platform.OS === 'web'
+//   ? 'http://127.0.0.1:8000/api'
 //   : `http://${getDevHostIp()}:8000/api`;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 5000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -111,6 +111,22 @@ export const getEmergencyTypes = async () => {
   } catch (error) {
     console.warn('[API Error] Failed to fetch emergency types', error);
     throw error;
+  }
+};
+
+/**
+ * Immediately save a new emergency type to the database.
+ * Returns the saved record (with emoji_icon and color_hex already resolved).
+ * If the type already exists, returns the existing record (no duplicate created).
+ */
+export const addEmergencyType = async (name: string): Promise<{ id: number; name: string; emoji_icon: string; color_hex: string }> => {
+  try {
+    const response = await apiClient.post('/emergency_types', { emergency_name: name });
+    return response.data.data;
+  } catch (error) {
+    console.warn('[API Error] Failed to save new emergency type', error);
+    // Return a minimal local object so the UI still works offline
+    return { id: 0, name, emoji_icon: '🚨', color_hex: '#a855f7' };
   }
 };
 
@@ -271,6 +287,16 @@ export const updateIncidentStatus = async (id: number, status: string) => {
     return response.data;
   } catch (error) {
     console.warn(`Error updating incident status to ${status} (falling back to simulation):`, error);
+    return { success: true };
+  }
+};
+
+export const updateIncidentLocation = async (id: number, latitude: number, longitude: number) => {
+  try {
+    const response = await apiClient.put(`/incident_details/${id}/location`, { latitude, longitude });
+    return response.data;
+  } catch (error) {
+    console.warn(`Error updating incident location (falling back to simulation):`, error);
     return { success: true };
   }
 };

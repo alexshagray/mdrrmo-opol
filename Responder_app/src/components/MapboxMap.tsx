@@ -1,10 +1,14 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
-import { WebView } from 'react-native-webview';
+import MapboxGL from '@rnmapbox/maps';
+
+// Set the access token
+MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiYWxleHNoYWdyYXkiLCJhIjoiY21xeHNlYnBrMXY1NDJ1cTJtZmRnYzd3eiJ9.KV9UNBsiTYh4bi-tuCaROg");
 
 interface Coordinate {
   latitude: number;
   longitude: number;
+  radiusKm?: number;
 }
 
 interface MapboxMapProps {
@@ -14,12 +18,15 @@ interface MapboxMapProps {
   isResponding?: boolean;
   isOffRoute?: boolean;
   isFirstPersonView?: boolean;
+  isWithinRadius?: boolean;
   boundaryPolygon?: any;
   onRouteUpdate?: (data: {
     totalDistance: number;
     coordinates: Coordinate[];
     instructions: Array<{ text: string; distance: number; index: number }>;
   }) => void;
+  onCallerLocationAdjust?: (coordinate: Coordinate) => void;
+  bearing?: number;
 }
 
 export default function MapboxMap({
@@ -29,679 +36,317 @@ export default function MapboxMap({
   isResponding = false,
   isOffRoute = false,
   isFirstPersonView = false,
+  isWithinRadius = false,
   boundaryPolygon,
   onRouteUpdate,
+  onCallerLocationAdjust,
+  bearing = 0,
 }: MapboxMapProps) {
-  const webViewRef = useRef<WebView>(null);
+  const cameraRef = useRef<MapboxGL.Camera>(null);
 
-  // Resolve local image URI for the ambulance icon
-  const ambulanceIconUri = Image.resolveAssetSource(require('../../assets/images/ambulance_green_screen_1783346989156-removebg-preview.png')).uri;
+  const [routeData, setRouteData] = useState<any>(null);
 
-  // Send coordinates and state updates to Mapbox HTML inside WebView
+  // Pre-defined OPOL Zones from WebView implementation
+  const opolZonesGeoJSON = {
+    type: "FeatureCollection",
+    features: []
+  };
+
   useEffect(() => {
-    if (webViewRef.current) {
-      const data = {
-        responderLocation,
-        callerLocation,
-        incidentLocation,
-        isResponding,
-        isOffRoute,
-        isFirstPersonView,
-        boundaryPolygon,
-        ambulanceIconUri,
-      };
-      webViewRef.current.postMessage(JSON.stringify(data));
+    if (isResponding && incidentLocation && responderLocation) {
+      // Only calculate route ONCE when incidentLocation or isResponding changes
+      getRoute();
+    } else if (!isResponding) {
+      setRouteData(null);
     }
-  }, [responderLocation, callerLocation, incidentLocation, isResponding, isFirstPersonView, boundaryPolygon, ambulanceIconUri]);
+    // DO NOT depend on responderLocation here, otherwise the route recalculates every second during simulation!
+  }, [incidentLocation, isResponding]);
 
-  const mapboxHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-      <title>Mapbox Map</title>
-      
-      <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
-      <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+  const decodePolyline = (encoded: string) => {
+    let points: [number, number][] = [];
+    let index = 0, lat = 0, lng = 0;
+    while (index < encoded.length) {
+      let b, shift = 0, result = 0;
+      do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1)); lat += dlat;
+      shift = 0; result = 0;
+      do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1)); lng += dlng;
+      points.push([lng / 1e5, lat / 1e5]); // [longitude, latitude] for Mapbox
+    }
+    return points;
+  };
 
-      <style>
-        body { margin: 0; padding: 0; background-color: #111; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; border-radius: 16px; }
-        
-        .custom-marker {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            border: 2px solid white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            font-size: 20px;
-        }
-      </style>
-    </head>
-    <body>
-      <div id="map"></div>
+  const getRoute = async () => {
+    if (!responderLocation || !incidentLocation) return;
+    try {
+      const start = [responderLocation.longitude, responderLocation.latitude];
+      const end = [incidentLocation.longitude, incidentLocation.latitude];
+      const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-      <script>
-        mapboxgl.accessToken = '${process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiYWxleHNoYWdyYXkiLCJhIjoiY21xeHNlYnBrMXY1NDJ1cTJtZmRnYzd3eiJ9.KV9UNBsiTYh4bi-tuCaROg"}';
-        
-        const map = new mapboxgl.Map({
-            container: 'map',
-            style: 'mapbox://styles/mapbox/satellite-streets-v12',
-            center: [124.5772, 8.5204],
-            zoom: 13,
-            attributionControl: false
-        });
+      if (GOOGLE_API_KEY) {
+        try {
+          // 1. Google Maps Directions API (Highly Accurate)
+          const response = await fetch(`https://maps.googleapis.com/maps/api/directions/json?origin=${start[1]},${start[0]}&destination=${end[1]},${end[0]}&key=${GOOGLE_API_KEY}`);
+          const json = await response.json();
+          if (json.routes && json.routes.length > 0) {
+            const route = json.routes[0];
 
-        let responderMarker = null;
-        let callerMarker = null;
-        let incidentMarker = null;
-        let previousResponderLngLat = null;
-        let currentBearing = 0;
-        let latestRouteCoords = [];
-        
-        let markerAnimationId = null;
-        let markerCurrentLngLat = null;
-        let markerCurrentRot = 0;
-        let markerTargetLngLat = null;
-        let markerTargetRot = 0;
-
-        function calculateBearing(start, end) {
-            const startLat = start[1] * Math.PI / 180;
-            const startLng = start[0] * Math.PI / 180;
-            const endLat = end[1] * Math.PI / 180;
-            const endLng = end[0] * Math.PI / 180;
-            const y = Math.sin(endLng - startLng) * Math.cos(endLat);
-            const x = Math.cos(startLat) * Math.sin(endLat) -
-                      Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
-            const bearing = Math.atan2(y, x) * 180 / Math.PI;
-            return (bearing + 360) % 360;
-        }
-
-        const opolZonesGeoJSON = {
-          "type": "FeatureCollection",
-          "features": [
-            { "type": "Feature", "properties": { "zone": "Zone 1", "barangay": "Barra" }, "geometry": { "type": "Point", "coordinates": [124.60913431051209, 8.512965080504214] } },
-            { "type": "Feature", "properties": { "zone": "Zone 2", "barangay": "Barra" }, "geometry": { "type": "Point", "coordinates": [124.6215, 8.5155] } },
-            { "type": "Feature", "properties": { "zone": "Zone 3", "barangay": "Barra" }, "geometry": { "type": "Point", "coordinates": [124.6220, 8.5140] } },
-            { "type": "Feature", "properties": { "zone": "Zone 4", "barangay": "Barra" }, "geometry": { "type": "Point", "coordinates": [124.6235, 8.5130] } },
-            { "type": "Feature", "properties": { "zone": "Zone 5", "barangay": "Barra" }, "geometry": { "type": "Point", "coordinates": [124.6245, 8.5125] } },
-            { "type": "Feature", "properties": { "zone": "Zone 1", "barangay": "Igpit" }, "geometry": { "type": "Point", "coordinates": [124.6090, 8.5140] } },
-            { "type": "Feature", "properties": { "zone": "Zone 2", "barangay": "Igpit" }, "geometry": { "type": "Point", "coordinates": [124.6080, 8.5135] } },
-            { "type": "Feature", "properties": { "zone": "Zone 3", "barangay": "Igpit" }, "geometry": { "type": "Point", "coordinates": [124.6075, 8.5120] } },
-            { "type": "Feature", "properties": { "zone": "Zone 1", "barangay": "Poblacion" }, "geometry": { "type": "Point", "coordinates": [124.5775, 8.5220] } },
-            { "type": "Feature", "properties": { "zone": "Zone 2", "barangay": "Poblacion" }, "geometry": { "type": "Point", "coordinates": [124.5765, 8.5215] } },
-            { "type": "Feature", "properties": { "zone": "Zone 3", "barangay": "Poblacion" }, "geometry": { "type": "Point", "coordinates": [124.5755, 8.5205] } }
-          ]
-        };
-        
-        function createMarkerElement(emoji, bgColor) {
-            const el = document.createElement('div');
-            el.className = 'custom-marker';
-            el.style.backgroundColor = bgColor;
-            el.style.width = '36px';
-            el.style.height = '36px';
-            el.innerHTML = emoji;
-            return el;
-        }
-
-        function createImageMarkerElement(imageUrl) {
-            const container = document.createElement('div');
-            container.style.width = '0px';
-            container.style.height = '0px';
-            container.style.position = 'relative';
-
-            const el = document.createElement('div');
-            el.className = 'custom-marker responder-icon';
-            el.style.backgroundColor = 'transparent';
-            el.style.border = 'none';
-            el.style.boxShadow = 'none';
-            el.style.backgroundImage = 'url("' + imageUrl + '")';
-            el.style.backgroundSize = 'contain';
-            el.style.backgroundRepeat = 'no-repeat';
-            el.style.backgroundPosition = 'center';
-            el.style.position = 'absolute';
-            
-            // Set initial size
-            const initialSize = 54;
-            el.style.width = initialSize + 'px';
-            el.style.height = initialSize + 'px';
-            el.style.top = -(initialSize/2) + 'px';
-            el.style.left = -(initialSize/2) + 'px';
-            el.style.filter = 'drop-shadow(0px 8px 10px rgba(0,0,0,0.5))';
-            
-            container.appendChild(el);
-            return container;
-        }
-
-        map.on('load', () => {
-            map.addSource('opol-zones', {
-                'type': 'geojson',
-                'data': opolZonesGeoJSON
-            });
-            map.addLayer({
-                'id': 'opol-zones-labels',
-                'type': 'symbol',
-                'source': 'opol-zones',
-                'minzoom': 13,
-                'layout': {
-                    'text-field': ['get', 'zone'],
-                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-                    'text-size': ['interpolate', ['linear'], ['zoom'], 13, 12, 16, 16],
-                    'text-anchor': 'center'
-                },
-                'paint': {
-                    'text-color': '#ffffff',
-                    'text-halo-color': '#000000',
-                    'text-halo-width': 1.5
-                }
+            // Concatenate high-resolution step polylines for precise road snapping
+            let highResCoords: [number, number][] = [];
+            route.legs[0].steps.forEach((step: any) => {
+              const stepCoords = decodePolyline(step.polyline.points);
+              highResCoords = highResCoords.concat(stepCoords);
             });
 
-            map.addSource('route', {
-                'type': 'geojson',
-                'data': {
-                    'type': 'Feature',
-                    'properties': {},
-                    'geometry': {
-                        'type': 'LineString',
-                        'coordinates': latestRouteCoords
-                    }
-                }
-            });
+            // Add the exact destination pin so the route line connects to it cleanly
+            highResCoords.push([end[0], end[1]]);
 
-            map.addLayer({
-                'id': 'route-casing',
-                'type': 'line',
-                'source': 'route',
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#ffffff',
-                    'line-width': 10,
-                    'line-opacity': 1
-                }
-            });
-
-            map.addLayer({
-                'id': 'route',
-                'type': 'line',
-                'source': 'route',
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#0a84ff',
-                    'line-width': 6,
-                    'line-opacity': 1
-                }
-            });
-
-            map.addSource('incident-circle', {
-                'type': 'geojson',
-                'data': {
-                    "type": "FeatureCollection",
-                    "features": []
-                }
-            });
-
-            map.addLayer({
-                'id': 'incident-circle-fill',
-                'type': 'fill',
-                'source': 'incident-circle',
-                'paint': {
-                    'fill-color': '#ef4444',
-                    'fill-opacity': 0.2
-                }
-            });
-
-            map.addLayer({
-                'id': 'incident-circle-line',
-                'type': 'line',
-                'source': 'incident-circle',
-                'paint': {
-                    'line-color': '#ef4444',
-                    'line-width': 2,
-                    'line-dasharray': [2, 2]
-                }
-            });
-
-            const recenterBtn = document.createElement('div');
-            recenterBtn.innerHTML = '🎯 Recenter';
-            recenterBtn.style.position = 'absolute';
-            recenterBtn.style.bottom = '20px';
-            recenterBtn.style.right = '20px';
-            recenterBtn.style.backgroundColor = '#181822';
-            recenterBtn.style.color = '#fff';
-            recenterBtn.style.padding = '8px 12px';
-            recenterBtn.style.borderRadius = '16px';
-            recenterBtn.style.fontFamily = 'sans-serif';
-            recenterBtn.style.fontSize = '14px';
-            recenterBtn.style.fontWeight = 'bold';
-            recenterBtn.style.cursor = 'pointer';
-            recenterBtn.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
-            recenterBtn.style.display = 'none';
-            recenterBtn.style.zIndex = '999';
-            recenterBtn.style.border = '1px solid #2b2b36';
-            recenterBtn.onclick = () => {
-                window.userPanned = false;
-                recenterBtn.style.display = 'none';
-                if (window.latestStart) {
-                    map.flyTo({ center: window.latestStart, zoom: 16, pitch: 45 });
-                }
+            // We use highResCoords to render the line so it follows the road perfectly.
+            const googleRouteData = {
+              distance: route.legs[0].distance.value,
+              geometry: { type: 'LineString', coordinates: highResCoords },
+              legs: [{
+                steps: route.legs[0].steps.map((step: any) => ({
+                  distance: step.distance.value,
+                  maneuver: { instruction: step.html_instructions.replace(/<[^>]*>?/gm, '') }, // Strip HTML from instructions
+                  geometry: { coordinates: decodePolyline(step.polyline.points) }
+                }))
+              }]
             };
-            document.body.appendChild(recenterBtn);
 
-            map.on('dragstart', () => { 
-                window.userPanned = true; 
-                recenterBtn.style.display = 'block';
-            });
-            map.on('touchstart', () => {
-                window.userPanned = true; 
-                recenterBtn.style.display = 'block';
-            });
-        });
-
-        window.userPanned = false;
-        window.latestStart = null;
-        window.lastIncidentLoc = null;
-        window.hasRoute = false;
-        window.lastClosestIndex = 0;
-
-        async function getRoute(start, end) {
-            try {
-                const query = await fetch(
-                    \`https://api.mapbox.com/directions/v5/mapbox/driving/\${start[0]},\${start[1]};\${end[0]},\${end[1]}?steps=true&geometries=geojson&access_token=\${mapboxgl.accessToken}\`
-                );
-                const json = await query.json();
-                
-                if (json.code === 'InvalidInput') {
-                    throw new Error(json.message || 'Coordinates are too close.');
-                }
-                
-                if (!json.routes || json.routes.length === 0) return;
-                
-                const data = json.routes[0];
-                const route = data.geometry.coordinates;
-                latestRouteCoords = route;
-                window.lastClosestIndex = 0;
-                
-                if (map.getSource('route')) {
-                    map.getSource('route').setData({
-                        type: 'Feature',
-                        properties: {},
-                        geometry: {
-                            type: 'LineString',
-                            coordinates: route
-                        }
-                    });
-                }
-
-            // Optional: send route instructions back to React Native
-            const instructions = [];
-            let coordIndex = 0;
-            data.legs[0].steps.forEach((step) => {
-                instructions.push({
-                    text: step.maneuver.instruction,
-                    distance: step.distance,
-                    index: coordIndex
-                });
+            setRouteData(googleRouteData);
+            if (onRouteUpdate) {
+              const instructions: any[] = [];
+              let coordIndex = 0;
+              googleRouteData.legs[0].steps.forEach((step: any) => {
+                instructions.push({ text: step.maneuver.instruction, distance: step.distance, index: coordIndex });
                 coordIndex += step.geometry.coordinates.length;
-            });
-
-            const payload = {
-                type: 'ROUTE_UPDATE',
-                totalDistance: data.distance,
-                coordinates: route.map(c => ({ latitude: c[1], longitude: c[0] })),
+              });
+              onRouteUpdate({
+                totalDistance: googleRouteData.distance,
+                coordinates: highResCoords.map((c: any[]) => ({ latitude: c[1], longitude: c[0] })),
                 instructions
+              });
+            }
+            return; // Exit if Google succeeds
+          }
+        } catch (err) {
+          console.warn("Google Directions API Error:", err);
+        }
+      }
+
+      try {
+        // 2. Mapbox Directions API (Fallback)
+        const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1IjoiYWxleHNoYWdyYXkiLCJhIjoiY21xeHNlYnBrMXY1NDJ1cTJtZmRnYzd3eiJ9.KV9UNBsiTYh4bi-tuCaROg";
+        const response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&access_token=${token}`);
+        const json = await response.json();
+        if (json.routes && json.routes.length > 0) {
+          setRouteData(json.routes[0]);
+          if (onRouteUpdate) {
+            const data = json.routes[0];
+
+            // The route will follow the roads perfectly.
+            // We append the exact destination coordinate so it cleanly connects to the pin!
+            const coordinates = [...data.geometry.coordinates, [end[0], end[1]]];
+            
+            const mapboxRouteData = { 
+              ...data, 
+              geometry: { ...data.geometry, coordinates }
             };
+            setRouteData(mapboxRouteData);
 
-            if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+            if (onRouteUpdate) {
+              const instructions: any[] = [];
+              let coordIndex = 0;
+              data.legs[0].steps.forEach((step: any) => {
+                instructions.push({ text: step.maneuver.instruction, distance: step.distance, index: coordIndex });
+                coordIndex += step.geometry.coordinates.length;
+              });
+              onRouteUpdate({
+                totalDistance: data.distance,
+                coordinates: data.geometry.coordinates.map((c: any[]) => ({ latitude: c[1], longitude: c[0] })),
+                instructions
+              });
             }
-            } catch (err) {
-                console.error("Mapbox Route Error:", err);
-                if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: err.message }));
-                }
-            }
+          }
         }
+      } catch (err) {
+        console.warn("Mapbox Directions API Error:", err);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-        function updateMap(data) {
-            const bounds = new mapboxgl.LngLatBounds();
-            let hasPoints = false;
-
-            // 1. Responder Marker
-            if (data.responderLocation) {
-                const lngLat = [data.responderLocation.longitude, data.responderLocation.latitude];
-                bounds.extend(lngLat);
-                hasPoints = true;
-                
-                if (previousResponderLngLat && (previousResponderLngLat[0] !== lngLat[0] || previousResponderLngLat[1] !== lngLat[1])) {
-                    // Update bearing only if location actually changed
-                    currentBearing = calculateBearing(previousResponderLngLat, lngLat);
-                }
-                previousResponderLngLat = lngLat;
-                
-                // The generated isometric image's front naturally points towards South-East (~135 degrees).
-                // We subtract 135 to correct the rotation offset so it faces the actual travel direction.
-                const rotationAngle = currentBearing - 135;
-                
-                if (!responderMarker) {
-                    markerCurrentLngLat = lngLat;
-                    markerCurrentRot = rotationAngle;
-                    responderMarker = new mapboxgl.Marker({ 
-                            element: createImageMarkerElement(data.ambulanceIconUri || ''),
-                            rotationAlignment: 'map'
-                        })
-                        .setLngLat(lngLat)
-                        .setRotation(rotationAngle)
-                        .addTo(map);
-                } else {
-                    markerTargetLngLat = lngLat;
-                    markerTargetRot = rotationAngle;
-                    
-                    if (markerAnimationId) cancelAnimationFrame(markerAnimationId);
-                    
-                    let startTimestamp = null;
-                    const duration = 1000;
-                    const startLngLat = [...markerCurrentLngLat];
-                    const startRot = markerCurrentRot;
-                    
-                    // Handle shortest path rotation wrapping
-                    let deltaRot = markerTargetRot - startRot;
-                    if (deltaRot > 180) deltaRot -= 360;
-                    if (deltaRot < -180) deltaRot += 360;
-                    
-                    const animateMarker = (timestamp) => {
-                        if (!startTimestamp) startTimestamp = timestamp;
-                        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                        
-                        // Linear interpolation is better for continuous GPS updates
-                        markerCurrentLngLat = [
-                            startLngLat[0] + (markerTargetLngLat[0] - startLngLat[0]) * progress,
-                            startLngLat[1] + (markerTargetLngLat[1] - startLngLat[1]) * progress
-                        ];
-                        markerCurrentRot = startRot + deltaRot * progress;
-                        
-                        responderMarker.setLngLat(markerCurrentLngLat);
-                        responderMarker.setRotation(markerCurrentRot);
-                        
-                        if (progress < 1) {
-                            markerAnimationId = requestAnimationFrame(animateMarker);
-                        }
-                    };
-                    markerAnimationId = requestAnimationFrame(animateMarker);
-
-                    if (data.ambulanceIconUri) {
-                        const iconEl = responderMarker.getElement().querySelector('.responder-icon');
-                        if (iconEl) {
-                            iconEl.style.backgroundImage = 'url("' + data.ambulanceIconUri + '")';
-                        }
-                    }
-                }
-
-                // Handle camera follow (First Person vs Top Down)
-                if (data.isFirstPersonView && !window.userPanned) {
-                    map.flyTo({
-                        center: lngLat,
-                        zoom: 18,
-                        pitch: 60,
-                        bearing: currentBearing,
-                        speed: 1.2
-                    });
-                } else if (window.wasFirstPersonView && !data.isFirstPersonView) {
-                    // Reset to top down if they just toggled it off
-                    map.flyTo({
-                        pitch: 0,
-                        bearing: 0,
-                        zoom: 15
-                    });
-                }
-                window.wasFirstPersonView = data.isFirstPersonView;
-
-                // Visually trim the route behind the ambulance
-                if (latestRouteCoords && latestRouteCoords.length > 0) {
-                    const rLng = lngLat[0];
-                    const rLat = lngLat[1];
-                    let minDistance = Infinity;
-                    let searchStart = window.lastClosestIndex || 0;
-                    searchStart = Math.max(0, searchStart - 5); // Allow slight backwards search for drift
-                    const searchEnd = Math.min(latestRouteCoords.length, searchStart + 50); // Don't search the whole route to avoid jumping on loops
-                    let closestIndex = searchStart;
-                    
-                    for (let i = searchStart; i < searchEnd; i++) {
-                        const coord = latestRouteCoords[i];
-                        const dx = rLng - coord[0];
-                        const dy = rLat - coord[1];
-                        const dist = dx*dx + dy*dy;
-                        if (dist < minDistance) {
-                            minDistance = dist;
-                            closestIndex = i;
-                        }
-                    }
-                    window.lastClosestIndex = closestIndex;
-                    
-                    if (closestIndex < latestRouteCoords.length) {
-                        // Connect current location cleanly to the remaining route
-                        const trimmedRoute = [[rLng, rLat], ...latestRouteCoords.slice(closestIndex)];
-                        if (map.getSource('route')) {
-                            map.getSource('route').setData({
-                                type: 'Feature',
-                                properties: {},
-                                geometry: {
-                                    type: 'LineString',
-                                    coordinates: trimmedRoute
-                                }
-                            });
-                        }
-                    }
-                }
-            } else if (responderMarker) {
-                if (responderMarker) responderMarker.remove();
-                responderMarker = null;
-            }
-
-            // 2. Caller Marker
-            if (data.callerLocation) {
-                const lngLat = [data.callerLocation.longitude, data.callerLocation.latitude];
-                bounds.extend(lngLat);
-                hasPoints = true;
-                
-                if (!callerMarker) {
-                    callerMarker = new mapboxgl.Marker({ element: createMarkerElement('📞', '#3b82f6') })
-                        .setLngLat(lngLat)
-                        .addTo(map);
-                } else {
-                    callerMarker.setLngLat(lngLat);
-                }
-            } else if (callerMarker) {
-                if (callerMarker) callerMarker.remove();
-                callerMarker = null;
-            }
-
-            // 3. Incident Marker
-            if (data.incidentLocation) {
-                const lngLat = [data.incidentLocation.longitude, data.incidentLocation.latitude];
-                bounds.extend(lngLat);
-                hasPoints = true;
-                
-                if (map.getSource('incident-circle')) {
-                    const radiusKm = data.incidentLocation.radiusKm || 0.1; // Dynamic radius
-                    const points = 64;
-                    const distanceX = radiusKm / (111.320 * Math.cos(lngLat[1] * Math.PI / 180));
-                    const distanceY = radiusKm / 110.574;
-                    const coords = [];
-                    for(let i = 0; i < points; i++) {
-                        const theta = (i / points) * (2 * Math.PI);
-                        coords.push([
-                            lngLat[0] + distanceX * Math.cos(theta),
-                            lngLat[1] + distanceY * Math.sin(theta)
-                        ]);
-                    }
-                    coords.push(coords[0]);
-
-                    map.getSource('incident-circle').setData({
-                        "type": "FeatureCollection",
-                        "features": [{
-                            "type": "Feature",
-                            "geometry": {
-                                "type": "Polygon",
-                                "coordinates": [coords]
-                            }
-                        }]
-                    });
-                }
-                if (incidentMarker) {
-                    incidentMarker.remove();
-                    incidentMarker = null;
-                }
-            } else {
-                if (map.getSource('incident-circle')) {
-                    map.getSource('incident-circle').setData({
-                        "type": "FeatureCollection",
-                        "features": []
-                    });
-                }
-                if (incidentMarker) {
-                    incidentMarker.remove();
-                    incidentMarker = null;
-                }
-            }
-
-            // Fit Bounds
-            if (hasPoints && !data.isResponding) {
-                map.fitBounds(bounds, { padding: 50, duration: 1000 });
-            }
-
-            // 3. Draw Boundary Polygon (if available)
-            if (data.boundaryPolygon) {
-                if (!map.getSource('barangay-boundary')) {
-                    map.addSource('barangay-boundary', {
-                        'type': 'geojson',
-                        'data': data.boundaryPolygon
-                    });
-
-                    map.addLayer({
-                        'id': 'barangay-boundary-fill',
-                        'type': 'fill',
-                        'source': 'barangay-boundary',
-                        'layout': {},
-                        'paint': {
-                            'fill-color': '#f87171',
-                            'fill-opacity': 0.2
-                        }
-                    });
-
-                    map.addLayer({
-                        'id': 'barangay-boundary-line',
-                        'type': 'line',
-                        'source': 'barangay-boundary',
-                        'layout': {},
-                        'paint': {
-                            'line-color': '#dc2626',
-                            'line-width': 3,
-                            'line-dasharray': [2, 2]
-                        }
-                    });
-
-                    // Automatically fit bounds to the polygon
-                    const polyBounds = new mapboxgl.LngLatBounds();
-                    const coordinates = data.boundaryPolygon.type === 'Polygon' 
-                        ? data.boundaryPolygon.coordinates[0]
-                        : data.boundaryPolygon.coordinates[0][0]; // Simplified for MultiPolygon
-                    
-                    if (coordinates) {
-                        coordinates.forEach(coord => {
-                            polyBounds.extend(coord);
-                        });
-                        map.fitBounds(polyBounds, { padding: 50, duration: 1000 });
-                    }
-                }
-            }
-
-            // Routing
-            if (data.isResponding && data.responderLocation && data.incidentLocation) {
-                const start = [data.responderLocation.longitude, data.responderLocation.latitude];
-                const end = [data.incidentLocation.longitude, data.incidentLocation.latitude];
-                window.latestStart = start;
-                
-                const endStr = end.join(',');
-                if (window.lastIncidentLoc !== endStr || !window.hasRoute || data.isOffRoute) {
-                    window.lastIncidentLoc = endStr;
-                    window.hasRoute = true;
-                    getRoute(start, end);
-                }
-                
-                // Keep camera centered on responder when routing (if not in first person view)
-                if (!window.userPanned && !data.isFirstPersonView) {
-                    map.flyTo({ center: start, zoom: 16, pitch: 0, bearing: 0 });
-                }
-            } else {
-                if (map.getSource('route')) {
-                    map.getSource('route').setData({
-                        type: 'Feature',
-                        properties: {},
-                        geometry: { type: 'LineString', coordinates: [] }
-                    });
-                }
-                window.hasRoute = false;
-            }
+  const generateCirclePolygon = (center: [number, number], radiusKm: number = 0.1) => {
+    const points = 64;
+    const coords = [];
+    const distanceX = radiusKm / (111.320 * Math.cos(center[1] * Math.PI / 180));
+    const distanceY = radiusKm / 110.574;
+    for (let i = 0; i < points; i++) {
+      const theta = (i / points) * (2 * Math.PI);
+      coords.push([
+        center[0] + distanceX * Math.cos(theta),
+        center[1] + distanceY * Math.sin(theta)
+      ]);
+    }
+    coords.push(coords[0]);
+    return {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [coords]
         }
+      }]
+    };
+  };
 
-        // Listen for communication from React Native
-        window.addEventListener('message', function(event) {
-          try {
-            var data = JSON.parse(event.data);
-            updateMap(data);
-          } catch (e) {}
-        });
-        document.addEventListener('message', function(event) {
-          try {
-            var data = JSON.parse(event.data);
-            updateMap(data);
-          } catch (e) {}
-        });
-      </script>
-    </body>
-    </html>
-  `;
+  const hasInitiallyCentered = useRef(false);
+
+  useEffect(() => {
+    if (isFirstPersonView && responderLocation && cameraRef.current) {
+      // Constantly lock to responder in 3D view
+      cameraRef.current.setCamera({
+        centerCoordinate: [responderLocation.longitude, responderLocation.latitude],
+        zoomLevel: 18,
+        pitch: 60,
+        heading: bearing,
+        animationDuration: 1000
+      });
+    } else if (responderLocation && cameraRef.current && !hasInitiallyCentered.current) {
+      // Center on responder only ONCE on initial load
+      hasInitiallyCentered.current = true;
+      cameraRef.current.setCamera({
+        centerCoordinate: [responderLocation.longitude, responderLocation.latitude],
+        zoomLevel: 15,
+        pitch: 0,
+        heading: 0,
+        animationDuration: 1000
+      });
+    }
+  }, [responderLocation, isFirstPersonView, bearing]);
+
+  // Reset pitch and heading when toggling OUT of First Person View
+  useEffect(() => {
+    if (!isFirstPersonView && responderLocation && cameraRef.current && hasInitiallyCentered.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [responderLocation.longitude, responderLocation.latitude],
+        zoomLevel: 15,
+        pitch: 0,
+        heading: 0,
+        animationDuration: 1000
+      });
+    }
+  }, [isFirstPersonView]);
 
   return (
     <View style={styles.container}>
-      <WebView
-        ref={webViewRef}
-        originWhitelist={['*']}
-        source={{ html: mapboxHtml }}
+      <MapboxGL.MapView
         style={styles.map}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        onMessage={(event) => {
-          try {
-            const data = JSON.parse(event.nativeEvent.data);
-            if (data.type === 'ROUTE_UPDATE' && onRouteUpdate) {
-              onRouteUpdate(data);
-            } else if (data.type === 'ERROR') {
-              console.error("Mapbox Route Error from WebView:", data.message);
-              alert("Mapbox Error: " + data.message);
-            }
-          } catch (e) {}
-        }}
-        onLoadEnd={() => {
-          if (webViewRef.current) {
-            const data = { responderLocation, callerLocation, incidentLocation, isResponding, isOffRoute, ambulanceIconUri };
-            webViewRef.current.postMessage(JSON.stringify(data));
-          }
-        }}
-      />
+        styleURL="mapbox://styles/mapbox/satellite-streets-v12"
+        logoEnabled={false}
+        attributionEnabled={false}
+      >
+        <MapboxGL.Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: [124.5772, 8.5204],
+            zoomLevel: 13,
+          }}
+        />
+
+        {/* 3D Terrain */}
+        <MapboxGL.RasterDemSource id="terrain-dem" url="mapbox://mapbox.mapbox-terrain-dem-v1">
+          <MapboxGL.Terrain style={{ exaggeration: 1.5 }} />
+        </MapboxGL.RasterDemSource>
+
+        {/* OPOL Zones */}
+        <MapboxGL.ShapeSource id="opol-zones" shape={opolZonesGeoJSON as any}>
+          <MapboxGL.SymbolLayer
+            id="opol-zones-labels"
+            style={{
+              textField: ['get', 'zone'],
+              textSize: 14,
+              textColor: '#ffffff',
+              textHaloColor: '#000000',
+              textHaloWidth: 1.5,
+            }}
+          />
+        </MapboxGL.ShapeSource>
+
+        {/* Boundary Polygon */}
+        {boundaryPolygon && (
+          <MapboxGL.ShapeSource id="boundary" shape={boundaryPolygon}>
+            <MapboxGL.FillLayer id="boundary-fill" style={{ fillColor: '#f87171', fillOpacity: 0.2 }} />
+            <MapboxGL.LineLayer id="boundary-line" style={{ lineColor: '#dc2626', lineWidth: 3, lineDasharray: [2, 2] }} />
+          </MapboxGL.ShapeSource>
+        )}
+
+        {/* Incident Circle */}
+        {!isWithinRadius && incidentLocation && (
+          <MapboxGL.ShapeSource id="incident-circle" shape={generateCirclePolygon([incidentLocation.longitude, incidentLocation.latitude], incidentLocation.radiusKm) as any}>
+            <MapboxGL.FillLayer id="incident-fill" style={{ fillColor: '#ef4444', fillOpacity: 0.2 }} />
+            <MapboxGL.LineLayer id="incident-line" style={{ lineColor: '#ef4444', lineWidth: 2, lineDasharray: [2, 2] }} />
+          </MapboxGL.ShapeSource>
+        )}
+
+        {/* Route Line */}
+        {!isWithinRadius && routeData && routeData.geometry && (
+          <MapboxGL.ShapeSource id="route-source" shape={{
+            type: 'Feature',
+            properties: {},
+            geometry: routeData.geometry
+          }}>
+            <MapboxGL.LineLayer id="route-casing" style={{ lineColor: '#0047AB', lineWidth: 10, lineCap: 'round', lineJoin: 'round' }} />
+            <MapboxGL.LineLayer id="route-line" style={{ lineColor: '#3B82F6', lineWidth: 6, lineCap: 'round', lineJoin: 'round' }} />
+          </MapboxGL.ShapeSource>
+        )}
+
+        {/* Caller Marker */}
+        {!isWithinRadius && callerLocation && (
+          <MapboxGL.PointAnnotation
+            id="caller"
+            coordinate={[callerLocation.longitude, callerLocation.latitude]}
+            draggable={!!onCallerLocationAdjust}
+            onDragEnd={(e) => {
+              if (onCallerLocationAdjust) {
+                onCallerLocationAdjust({
+                  latitude: e.geometry.coordinates[1],
+                  longitude: e.geometry.coordinates[0],
+                });
+              }
+            }}
+          >
+            <View style={styles.callerMarker}><Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3247/3247310.png' }} style={{ width: 20, height: 20 }} /></View>
+          </MapboxGL.PointAnnotation>
+        )}
+
+        {/* Responder Marker */}
+        {responderLocation && (
+          <MapboxGL.PointAnnotation id="responder" coordinate={[responderLocation.longitude, responderLocation.latitude]}>
+            <View style={{ width: 54, height: 54 }}>
+              <Image
+                source={require('../../assets/images/ambulance_green_screen_1783346989156-removebg-preview.png')}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  resizeMode: 'contain',
+                  transform: [{ rotate: `${bearing}deg` }]
+                }}
+              />
+            </View>
+          </MapboxGL.PointAnnotation>
+        )}
+      </MapboxGL.MapView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: 'hidden', borderRadius: 20, backgroundColor: '#111' },
-  map: { flex: 1, backgroundColor: 'transparent' },
+  map: { flex: 1 },
+  callerMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white' }
 });

@@ -11,6 +11,11 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1IjoiYWxleHNoYWdyYXkiLCJhIjoiY21xeHNlYnBrMXY1NDJ1cTJtZmRnYzd3eiJ9.KV9UNBsiTYh4bi-tuCaROg",
+        "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "sk.eyJ1IjoiaGFlbGVlaGVhdGhlciIsImEiOiJjbXJlZ29wMmkwMGFxMndzYTBic3ZvbWduIn0.TzpJckwAyTrhtb4la9pC1g",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyB64wjKLuSSKUSc_hIHiv3o72YWaB7JWag"
       }
     },
     "production": {

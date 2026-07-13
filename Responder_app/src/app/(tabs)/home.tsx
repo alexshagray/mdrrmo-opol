@@ -405,12 +405,7 @@ export default function HomeScreen() {
                 <Text style={styles.actionText}>Manage PCRs</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/incoming-call', params: { phoneNumber: '+639500905679' }})}>
-                <View style={[styles.actionIconBg, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
-                  <Ionicons name="call" size={24} color="#ff9500" />
-                </View>
-                <Text style={styles.actionText}>Test Call UI</Text>
-              </TouchableOpacity>
+
 
               <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert('Sync Complete', 'All offline data is synced.')}>
                 <View style={[styles.actionIconBg, { backgroundColor: 'rgba(191, 90, 242, 0.15)' }]}>

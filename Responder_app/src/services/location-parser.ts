@@ -151,8 +151,46 @@ export const parseOpolLocation = async (locationText: string): Promise<ParsedLoc
 
   // Geocoding Fallback
   try {
+    const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const query = text.includes('opol') ? text : `${text} opol misamis oriental philippines`;
+
+    if (GOOGLE_API_KEY) {
+      // 1. Google Places API (Text Search) - Best for landmarks, businesses, and sari-sari stores
+      const placesResponse = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`);
+      if (placesResponse.ok) {
+        const placesData = await placesResponse.json();
+        if (placesData.results && placesData.results.length > 0) {
+          const result = placesData.results[0];
+          return {
+            latitude: result.geometry.location.lat,
+            longitude: result.geometry.location.lng,
+            zoom: 18, // Zoom in very close for exact landmarks
+            matchedBy: 'google_places',
+            name: `${result.name}, ${result.formatted_address}`
+          };
+        }
+      }
+
+      // 2. Google Maps Geocoding API - Best for exact street addresses (with Philippines strict bounds)
+      // Opol rough bounding box: bounds=8.45,124.50|8.65,124.70
+      const geocodeResponse = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:PH&bounds=8.45,124.50|8.65,124.70&key=${GOOGLE_API_KEY}`);
+      if (geocodeResponse.ok) {
+        const geocodeData = await geocodeResponse.json();
+        if (geocodeData.results && geocodeData.results.length > 0) {
+          const result = geocodeData.results[0];
+          return {
+            latitude: result.geometry.location.lat,
+            longitude: result.geometry.location.lng,
+            zoom: 17,
+            matchedBy: 'google_geocoding',
+            name: result.formatted_address
+          };
+        }
+      }
+    }
+    
+    // 2. Mapbox Geocoding API (Fallback if Google fails or no key provided)
     const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1IjoiYWxleHNoYWdyYXkiLCJhIjoiY21xeHNlYnBrMXY1NDJ1cTJtZmRnYzd3eiJ9.KV9UNBsiTYh4bi-tuCaROg';
-    const query = text.includes('opol') ? text : `${text} opol misamis oriental`;
     // bbox restricts the search to roughly Opol's bounding box
     const response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&limit=1&bbox=124.4,8.3,124.7,8.6`);
     
@@ -164,7 +202,7 @@ export const parseOpolLocation = async (locationText: string): Promise<ParsedLoc
           latitude: feature.center[1], 
           longitude: feature.center[0],
           zoom: 16,
-          matchedBy: 'geocoding',
+          matchedBy: 'mapbox_geocoding',
           name: feature.place_name
         };
       }

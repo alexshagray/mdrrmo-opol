@@ -16,16 +16,18 @@ import {
   Linking,
   BackHandler,
   Modal,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { CallDetectorModule } from 'expo-call-detector';
-import { checkResidentDatabase, reportIncident, getEmergencyTypes, fetchBarangays } from '@/services/api';
+import { checkResidentDatabase, reportIncident, getEmergencyTypes, fetchBarangays, addEmergencyType } from '@/services/api';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import GISMapPicker from '@/components/GISMapPicker';
 import * as Location from 'expo-location';
 import { robustGeocode } from '@/utils/geocoding';
 import { ALL_LOCATIONS } from '@/data/opol-locations';
+import MapboxGL from '@rnmapbox/maps';
 
 const BARANGAYS = ['Awang', 'Barra', 'Bagocboc', 'Bonbon', 'Cauyunan', 'Igpit', 'Luyong Bonbon', 'Limunda', 'Malanang', 'Nangcaon', 'Patag', 'Poblacion', 'Tingalan', 'Taboc'];
 
@@ -89,13 +91,15 @@ export default function IncomingCallScreen() {
   const [callerDetails, setCallerDetails] = useState<any>(null);
   
   // Manual entry fields for unregistered/missing details
-  const [manualName, setManualName] = useState('');
+  const [manualName, setManualName] = useState(''); // First Name
+  const [manualLastName, setManualLastName] = useState(''); // Last Name
   const [barangay, setBarangay] = useState('');
   const [purok, setPurok] = useState('');
   const [landmark, setLandmark] = useState('');
   const [callerLocation, setCallerLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [incidentDetails, setIncidentDetails] = useState('');
   
+  const [isSavingEmergencyType, setIsSavingEmergencyType] = useState(false);
   const [showBrgyModal, setShowBrgyModal] = useState(false);
   const [showPurokModal, setShowPurokModal] = useState(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
@@ -111,10 +115,11 @@ export default function IncomingCallScreen() {
   const availableLandmarks = ALL_LOCATIONS
     .filter(loc => {
       const isLandmark = ['landmark', 'school', 'church', 'hospital', 'public_building', 'establishment'].includes(loc.type);
-      if (!isLandmark || loc.barangay !== barangay) return false;
+      if (!isLandmark || !loc.barangay || loc.barangay.toLowerCase() !== barangay?.toLowerCase()) return false;
       
-      // If a purok/zone is selected, strictly filter landmarks by that purok/zone
-      if (purok) {
+      // If a purok is selected and the landmark HAS a zone assigned, filter it.
+      // But if the landmark has NO zone assigned, don't hide it (allow it to show).
+      if (purok && loc.zone) {
         if (loc.zone !== purok) return false;
       }
       return true;
@@ -240,8 +245,19 @@ export default function IncomingCallScreen() {
       setIsRegistered(result.isRegistered);
       if (result.resident) {
         setCallerDetails(result.resident);
-        // Pre-fill manual name with the previous caller's name
-        setManualName(result.resident.full_name || 'Visitor');
+        // Pre-fill name — filter out all known placeholder values
+        const PLACEHOLDER_NAMES = ['unknown caller', 'unknown', 'visitor', ''];
+        let dbFirstName = (result.resident.first_name || '').trim();
+        let dbLastName = (result.resident.last_name || '').trim();
+        let fullDbName = (result.resident.full_name || '').trim();
+        
+        if (PLACEHOLDER_NAMES.includes(fullDbName.toLowerCase())) {
+          dbFirstName = '';
+          dbLastName = '';
+        }
+        setManualName(dbFirstName);
+        setManualLastName(dbLastName);
+
         
         // Only try to geocode if they have an address string but no GPS coords
         if (result.resident.address) {
@@ -268,14 +284,14 @@ export default function IncomingCallScreen() {
           });
         }
       } else {
-        setManualName('Visitor');
+        setManualName('');
       }
 
 
     } catch (error) {
       console.warn('Failed to check resident database:', error);
       setIsRegistered(false);
-      setManualName('Visitor');
+      setManualName('');
     } finally {
       setIsCheckingDB(false);
     }
@@ -307,7 +323,17 @@ export default function IncomingCallScreen() {
     setFormErrors({});
     setIsNavigatingAway(true);
     // Prepare params to pass to the tracking screen
-    const passName = isRegistered && callerDetails?.full_name ? callerDetails.full_name : manualName;
+    // Always use what the responder actually typed in the input box!
+    let passName = 'Unknown Caller';
+    if (isRegistered && manualName) {
+      // If it's a registered user, they might just have manualName displaying their full name (from the earlier full_name logic).
+      // Or they might have first and last separated. If it's verified, manualName + manualLastName are prepopulated.
+      passName = `${manualName} ${manualLastName}`.trim();
+    } else {
+      passName = `${manualName} ${manualLastName}`.trim();
+    }
+    if (!passName) passName = 'Unknown Caller';
+
     let passLat = callerLocation?.latitude || callerDetails?.latitude;
     let passLng = callerLocation?.longitude || callerDetails?.longitude;
     
@@ -359,7 +385,7 @@ export default function IncomingCallScreen() {
     // Calculate boundary polygon if no purok is selected
     let boundaryPolygon = '';
     if (!purok && barangaysList.length > 0) {
-      const selectedBarangayData = barangaysList.find(b => b.barangay_name === barangay);
+      const selectedBarangayData = barangaysList.find(b => b.barangay_name.toLowerCase() === barangay.toLowerCase());
       if (selectedBarangayData && selectedBarangayData.boundary_polygon) {
         boundaryPolygon = typeof selectedBarangayData.boundary_polygon === 'string' 
           ? selectedBarangayData.boundary_polygon 
@@ -382,7 +408,7 @@ export default function IncomingCallScreen() {
         isRegistered: isRegistered ? 'true' : 'false',
         gpsEnabled: passLat ? 'true' : 'false',
         dbIncidentId: dbIncidentId,
-        boundaryPolygon: boundaryPolygon,
+        isNewDispatch: 'true',
       } 
     });
   }
@@ -568,14 +594,49 @@ export default function IncomingCallScreen() {
         <View style={styles.formContainer}>
           <Text style={styles.sectionTitle}>Incident Details</Text>
           
-          <Text style={styles.label}>Caller Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ask for caller's name"
-            placeholderTextColor="#666"
-            value={manualName}
-            onChangeText={setManualName}
-          />
+          {isRegistered && (manualName || manualLastName) ? (
+            /* Registered resident — name is already known, show read-only */
+            <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0d2e0d', borderColor: '#22c55e' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Ionicons name="shield-checkmark" size={16} color="#22c55e" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#22c55e', fontSize: 15, fontWeight: '600', flex: 1 }}>{`${manualName} ${manualLastName}`.trim()}</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  /* Allow override if needed */
+                  Alert.alert(
+                    'Edit Name',
+                    'The name is auto-filled from the resident database. Do you want to change it?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Edit', onPress: () => setIsRegistered(false) },
+                    ]
+                  );
+                }}
+                style={{ padding: 4 }}
+              >
+                <Ionicons name="pencil" size={14} color="#22c55e" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            /* Visitor / unknown caller — responder needs to ask and type the name */
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="First Name"
+                placeholderTextColor="#666"
+                value={manualName}
+                onChangeText={setManualName}
+              />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Last Name"
+                placeholderTextColor="#666"
+                value={manualLastName}
+                onChangeText={setManualLastName}
+              />
+            </View>
+          )}
 
               <Text style={styles.label}>Barangay <Text style={styles.requiredAsterisk}>*</Text></Text>
               <TouchableOpacity 
@@ -645,7 +706,6 @@ export default function IncomingCallScreen() {
                   onChangeText={setLandmark}
                 />
               )}
-              
           <Text style={styles.label}>Nature of Emergency <Text style={styles.requiredAsterisk}>*</Text></Text>
           <View style={[styles.input, { paddingVertical: 6, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' }, formErrors.incidentDetails && styles.inputError]}>
             <TouchableOpacity 
@@ -704,9 +764,20 @@ export default function IncomingCallScreen() {
         visible={showEmergencyModal} 
         onClose={() => setShowEmergencyModal(false)} 
         data={emergencyTypes} 
-        onSelect={setIncidentDetails} 
+        onSelect={async (val: string) => {
+          setIncidentDetails(val);
+          // If this type is NOT already in the list, save it to DB immediately
+          if (!emergencyTypes.some(t => t.toLowerCase() === val.toLowerCase())) {
+            setIsSavingEmergencyType(true);
+            await addEmergencyType(val);
+            // Optimistically add to local list so it appears in future dropdowns this session
+            setEmergencyTypes(prev => Array.from(new Set([...prev, val])).sort());
+            setIsSavingEmergencyType(false);
+          }
+        }} 
         title="Select Nature of Emergency" 
         allowCustomAdd={true}
+        isSaving={isSavingEmergencyType}
       />
       <SearchableSelectModal 
         visible={showLandmarkModal} 
@@ -720,46 +791,88 @@ export default function IncomingCallScreen() {
   );
 }
 
-const SearchableSelectModal = ({ visible, onClose, data, onSelect, title, allowCustomAdd }: { visible: boolean, onClose: () => void, data: string[], onSelect: (val: string) => void, title: string, allowCustomAdd?: boolean }) => {
+const SearchableSelectModal = ({ visible, onClose, data, onSelect, title, allowCustomAdd, isSaving }: { visible: boolean, onClose: () => void, data: string[], onSelect: (val: string) => void, title: string, allowCustomAdd?: boolean, isSaving?: boolean }) => {
   const [search, setSearch] = useState('');
-  // Deduplicate data to prevent identical options and duplicate key errors
-  const uniqueData = Array.from(new Set(data));
+  // Deduplicate data and sort alphabetically
+  const uniqueData = Array.from(new Set(data)).filter(Boolean).sort();
   const filtered = uniqueData.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
-        <View style={{ backgroundColor: '#111115', height: '60%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{title}</Text>
-            <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
-              <Ionicons name="close" size={24} color="#fff" />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#111116', height: '65%', borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24, borderWidth: 1, borderColor: '#1f1f26', shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.5, shadowRadius: 20 }}>
+          
+          {/* Drag Handle */}
+          <View style={{ width: 44, height: 5, backgroundColor: '#2b2b36', borderRadius: 3, alignSelf: 'center', marginBottom: 20 }} />
+          
+          {/* Header */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <Text style={{ color: '#fff', fontSize: 20, fontWeight: '800', letterSpacing: 0.5 }}>{title}</Text>
+              {isSaving && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                  <ActivityIndicator size="small" color="#0a84ff" style={{ marginRight: 6 }} />
+                  <Text style={{ color: '#0a84ff', fontSize: 13, fontWeight: '700' }}>Saving to system...</Text>
+                </View>
+              )}
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#1f1f26', padding: 8, borderRadius: 16 }} activeOpacity={0.7}>
+              <Ionicons name="close" size={20} color="#8e8e93" />
             </TouchableOpacity>
           </View>
-          <TextInput 
-            style={{ backgroundColor: '#1f1f26', color: '#fff', padding: 14, borderRadius: 12, marginBottom: 15, fontSize: 16 }} 
-            placeholder="Search..." 
-            placeholderTextColor="#8e8e93"
-            value={search}
-            onChangeText={setSearch}
-          />
-          <ScrollView keyboardShouldPersistTaps="handled">
-            {allowCustomAdd && search.trim().length > 0 && !uniqueData.some(d => d.toLowerCase() === search.trim().toLowerCase()) && (
-              <TouchableOpacity 
-                style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f1f26', flexDirection: 'row', alignItems: 'center' }} 
-                onPress={() => { onSelect(search.trim()); setSearch(''); onClose(); }}
-              >
-                <Ionicons name="add" size={20} color="#0a84ff" style={{ marginRight: 8 }} />
-                <Text style={{ color: '#0a84ff', fontSize: 16, fontWeight: '600' }}>Add "{search.trim()}"</Text>
+          
+          {/* Search Bar */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#16161b', borderWidth: 1, borderColor: '#2b2b36', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20, height: 54 }}>
+            <Ionicons name="search" size={20} color="#8e8e93" style={{ marginRight: 10 }} />
+            <TextInput 
+              style={{ flex: 1, color: '#fff', fontSize: 16, fontWeight: '500' }} 
+              placeholder="Search or type to add..." 
+              placeholderTextColor="#666"
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} style={{ padding: 4 }}>
+                <Ionicons name="close-circle" size={18} color="#666" />
               </TouchableOpacity>
             )}
+          </View>
+
+          {/* List Content */}
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20, gap: 10 }}>
+            {allowCustomAdd && search.trim().length > 0 && !uniqueData.some(d => d.toLowerCase() === search.trim().toLowerCase()) && (
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(10, 132, 255, 0.08)', borderWidth: 1, borderColor: 'rgba(10, 132, 255, 0.3)', borderStyle: 'dashed', padding: 16, borderRadius: 16 }} 
+                onPress={() => { onSelect(search.trim()); setSearch(''); onClose(); }}
+                activeOpacity={0.7}
+              >
+                <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(10, 132, 255, 0.15)', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                  <Ionicons name="add" size={20} color="#0a84ff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#0a84ff', fontSize: 15, fontWeight: '800' }}>Add new entry</Text>
+                  <Text style={{ color: 'rgba(10, 132, 255, 0.7)', fontSize: 13, fontWeight: '600', marginTop: 2 }}>"{search.trim()}"</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            
+            {filtered.length === 0 && search.trim().length > 0 && !allowCustomAdd && (
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
+                <Ionicons name="search-outline" size={40} color="#2b2b36" style={{ marginBottom: 12 }} />
+                <Text style={{ color: '#8e8e93', fontSize: 15, fontWeight: '600' }}>No matches found</Text>
+              </View>
+            )}
+
             {filtered.map((item, index) => (
               <TouchableOpacity 
                 key={`${item}-${index}`} 
-                style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f1f26' }} 
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#16161b', borderWidth: 1, borderColor: '#1f1f26', padding: 16, borderRadius: 16 }} 
                 onPress={() => { onSelect(item); setSearch(''); onClose(); }}
+                activeOpacity={0.7}
               >
-                <Text style={{ color: '#fff', fontSize: 16 }}>{item}</Text>
+                <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700' }}>{item}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#3b3b46" />
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -870,6 +983,7 @@ const styles = StyleSheet.create({
   },
   recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444', marginRight: 6 },
   timerText: { color: '#ef4444', fontWeight: '700', fontSize: 14, fontVariant: ['tabular-nums'] },
+  callerMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white' },
   
   scrollContent: {
     padding: 20,

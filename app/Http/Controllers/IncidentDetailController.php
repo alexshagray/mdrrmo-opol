@@ -58,8 +58,12 @@ class IncidentDetailController extends Controller
         }
 
         $typeString = $request->input('emergency_type', 'Other');
-        $emergencyType = \App\Models\EmergencyType::where('emergency_name', 'like', "%{$typeString}%")->first();
-        $typeId = $emergencyType ? $emergencyType->id : (\App\Models\EmergencyType::where('emergency_name', 'Other')->value('id') ?? 1);
+        // Automatically save new emergency types to the database so they appear in dropdowns later
+        $emergencyType = \App\Models\EmergencyType::firstOrCreate(
+            ['emergency_name' => $typeString],
+            ['description' => 'Custom emergency type added from mobile app']
+        );
+        $typeId = $emergencyType->id;
 
         $incident = IncidentDetail::create([
             'user_id' => $user ? $user->id : null,
@@ -119,7 +123,10 @@ class IncidentDetailController extends Controller
 
     public function destroyAll()
     {
+        \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
         IncidentDetail::truncate();
+        \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+        
         return response()->json([
             'success' => true,
             'message' => 'All Incident Reports deleted successfully'
@@ -167,6 +174,29 @@ class IncidentDetailController extends Controller
             'success' => true,
             'message' => 'Incident status updated successfully to ' . $request->status,
             'incident' => $incident
+        ]);
+    }
+
+    public function updateLocation(Request $request, $id)
+    {
+        $incident = IncidentDetail::find($id);
+        if (!$incident || !$incident->location) {
+            return response()->json(['success' => false, 'message' => 'Incident or location not found'], 404);
+        }
+
+        $request->validate([
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric'
+        ]);
+
+        $incident->location->update([
+            'latitude' => $request->latitude,
+            'longitude' => $request->longitude
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Incident location updated successfully'
         ]);
     }
 }

@@ -19,14 +19,14 @@ const getDevHostIp = (): string => {
 // --- CHOOSE YOUR CONNECTION METHOD (Uncomment the one you want to use) ---
 
 // Option 1: LocalTunnel (Works anywhere over the internet)
-// const SOCKET_URL = Platform.OS === 'web'
-//   ? 'http://127.0.0.1:3000'
-//   : 'https://mdrrmo-opol-socket.loca.lt'; // Permanent LocalTunnel URL
-
-// Option 2: Local Wi-Fi Network (Requires phone and PC on same Wi-Fi)
 const SOCKET_URL = Platform.OS === 'web'
   ? 'http://127.0.0.1:3000'
-  : `http://${getDevHostIp()}:3000`;
+  : 'https://seven-wasps-live.loca.lt'; // Permanent LocalTunnel URL
+
+// Option 2: Local Wi-Fi Network (Requires phone and PC on same Wi-Fi)
+// const SOCKET_URL = Platform.OS === 'web'
+//   ? 'http://127.0.0.1:3000'
+//   : `http://${getDevHostIp()}:3000`;
 
 
 export const initializeSocket = (url = SOCKET_URL) => {

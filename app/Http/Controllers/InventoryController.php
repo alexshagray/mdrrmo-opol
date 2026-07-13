@@ -75,7 +75,7 @@ class InventoryController extends Controller
                 $existingItem->transactions()->create([
                     'inventory_batch_id' => $batch->id,
                     'transaction_type' => 'in',
-                    'quantity' => $validated['quantity'],
+                    'quantity_moved' => $validated['quantity'],
                     'remarks' => 'Stock added (merged)'
                 ]);
             }
@@ -98,7 +98,7 @@ class InventoryController extends Controller
             $item->transactions()->create([
                 'inventory_batch_id' => $batch->id,
                 'transaction_type' => 'in',
-                'quantity' => $validated['quantity'],
+                'quantity_moved' => $validated['quantity'],
                 'remarks' => 'Initial stock'
             ]);
         }
@@ -148,7 +148,7 @@ class InventoryController extends Controller
                 $existingItem->transactions()->create([
                     'inventory_batch_id' => null,
                     'transaction_type' => 'adjust',
-                    'quantity' => 0,
+                    'quantity_moved' => 0,
                     'remarks' => 'Merged duplicate item (typo correction)'
                 ]);
 
@@ -179,7 +179,7 @@ class InventoryController extends Controller
             $item->transactions()->create([
                 'inventory_batch_id' => null,
                 'transaction_type' => 'adjust',
-                'quantity' => $diff,
+                'quantity_moved' => $diff,
                 'remarks' => 'Manual adjustment via edit'
             ]);
         }
@@ -219,7 +219,7 @@ class InventoryController extends Controller
         $item->transactions()->create([
             'inventory_batch_id' => $batch->id,
             'transaction_type' => 'in',
-            'quantity' => $validated['quantity'],
+            'quantity_moved' => $validated['quantity'],
             'remarks' => $validated['remarks'] ?? 'Stock added'
         ]);
 
@@ -258,7 +258,7 @@ class InventoryController extends Controller
             $item->transactions()->create([
                 'inventory_batch_id' => $batch->id,
                 'transaction_type' => 'out',
-                'quantity' => $deduct,
+                'quantity_moved' => $deduct,
                 'remarks' => $validated['remarks'] ?? 'Stock distributed'
             ]);
 
@@ -269,7 +269,7 @@ class InventoryController extends Controller
             $item->transactions()->create([
                 'inventory_batch_id' => null,
                 'transaction_type' => 'out',
-                'quantity' => $remainingToDistribute,
+                'quantity_moved' => $remainingToDistribute,
                 'remarks' => ($validated['remarks'] ?? 'Stock distributed') . ' (legacy stock)'
             ]);
         }
@@ -377,7 +377,7 @@ class InventoryController extends Controller
                         $existingItem->transactions()->create([
                             'inventory_batch_id' => $batch->id,
                             'transaction_type' => 'in',
-                            'quantity' => $quantity,
+                            'quantity_moved' => $quantity,
                             'remarks' => 'Bulk CSV upload (merged)'
                         ]);
                     }
@@ -403,7 +403,7 @@ class InventoryController extends Controller
                         $item->transactions()->create([
                             'inventory_batch_id' => $batch->id,
                             'transaction_type' => 'in',
-                            'quantity' => $quantity,
+                            'quantity_moved' => $quantity,
                             'remarks' => 'Bulk CSV upload (initial)'
                         ]);
                     }

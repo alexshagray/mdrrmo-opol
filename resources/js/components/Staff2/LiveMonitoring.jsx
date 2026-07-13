@@ -30,13 +30,14 @@ const calculateBearing = (start, end) => {
   const endLng = end[0] * Math.PI / 180;
   const y = Math.sin(endLng - startLng) * Math.cos(endLat);
   const x = Math.cos(startLat) * Math.sin(endLat) -
-            Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
+    Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
   const bearing = Math.atan2(y, x) * 180 / Math.PI;
   return (bearing + 360) % 360;
 };
 
 const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
   const [routeGeoJSON, setRouteGeoJSON] = useState(null);
+  const [jumpGeoJSON, setJumpGeoJSON] = useState(null);
   const fullRouteCoords = useRef([]);
   const lastClosestIndex = useRef(0);
   const lastFetchedEndCoords = useRef(null);
@@ -60,21 +61,42 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
     if (!shouldFetch) return;
     lastFetchedEndCoords.current = endCoords;
 
+    const decodePolyline = (encoded) => {
+      let points = [];
+      let index = 0, lat = 0, lng = 0;
+      while (index < encoded.length) {
+        let b, shift = 0, result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1)); lat += dlat;
+        shift = 0; result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1)); lng += dlng;
+        points.push([lng / 1e5, lat / 1e5]); // [longitude, latitude] for Mapbox
+      }
+      return points;
+    };
+
     const fetchRoute = async () => {
       try {
+        // Web Browser CORS blocks Google Directions REST API.
+        // We use Mapbox Directions API exclusively for the web app.
         const query = await fetch(
           `https://api.mapbox.com/directions/v5/mapbox/driving/${startCoords[0]},${startCoords[1]};${endCoords[0]},${endCoords[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
         );
         const json = await query.json();
         if (json.routes && json.routes.length > 0) {
           const coords = json.routes[0].geometry.coordinates;
+          
           fullRouteCoords.current = coords;
           lastClosestIndex.current = 0;
+          
           setRouteGeoJSON({
             type: 'Feature',
             properties: {},
             geometry: { type: 'LineString', coordinates: coords }
           });
+          
+          setJumpGeoJSON(null);
         }
       } catch (err) {
         console.error("Mapbox Route Error:", err);
@@ -87,11 +109,11 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
   // 2. Trim route when startCoords (responder location) changes
   useEffect(() => {
     if (!fullRouteCoords.current || fullRouteCoords.current.length === 0 || !startCoords) return;
-    
+
     const rLng = startCoords[0];
     const rLat = startCoords[1];
     let minDistance = Infinity;
-    
+
     let searchStart = lastClosestIndex.current || 0;
     searchStart = Math.max(0, searchStart - 5);
     const searchEnd = Math.min(fullRouteCoords.current.length, searchStart + 50);
@@ -123,7 +145,8 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
   if (!routeGeoJSON) {
     return (
       <Source
-        id={`resp-route-src-${responderId}`}
+        key={`fallback-src-${responderId}`}
+        id={`resp-route-src-fallback-${responderId}`}
         type="geojson"
         data={{
           type: 'Feature',
@@ -132,10 +155,10 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
         }}
       >
         <Layer
-          id={`resp-route-layer-${responderId}`}
+          id={`resp-route-layer-fallback-${responderId}`}
           type="line"
           paint={{
-            'line-color': '#0a84ff',
+            'line-color': '#0000FF',
             'line-width': 8,
             'line-dasharray': [2, 2]
           }}
@@ -145,30 +168,52 @@ const ResponderMapRoute = ({ responderId, startCoords, endCoords }) => {
   }
 
   return (
-    <Source
-      id={`resp-route-src-${responderId}`}
-      type="geojson"
-      data={routeGeoJSON}
-    >
-      <Layer
-        id={`resp-route-casing-${responderId}`}
-        type="line"
-        paint={{
-          'line-color': '#ffffff',
-          'line-width': 14,
-          'line-opacity': 1
-        }}
-      />
-      <Layer
-        id={`resp-route-layer-${responderId}`}
-        type="line"
-        paint={{
-          'line-color': '#0a84ff',
-          'line-width': 8,
-          'line-opacity': 1
-        }}
-      />
-    </Source>
+    <>
+      <Source
+        key={`real-src-${responderId}`}
+        id={`resp-route-src-${responderId}`}
+        type="geojson"
+        data={routeGeoJSON}
+      >
+        <Layer
+          id={`resp-route-casing-${responderId}`}
+          type="line"
+          paint={{
+            'line-color': '#0047AB',
+            'line-width': 14,
+            'line-opacity': 1
+          }}
+        />
+        <Layer
+          id={`resp-route-layer-${responderId}`}
+          type="line"
+          paint={{
+            'line-color': '#3B82F6',
+            'line-width': 8,
+            'line-opacity': 1
+          }}
+        />
+      </Source>
+      
+      {jumpGeoJSON && (
+        <Source
+          id={`resp-jump-src-${responderId}`}
+          type="geojson"
+          data={jumpGeoJSON}
+        >
+          <Layer
+            id={`resp-jump-layer-${responderId}`}
+            type="line"
+            paint={{
+              'line-color': '#0000FF',
+              'line-width': 6,
+              'line-opacity': 1,
+              'line-dasharray': [2, 2]
+            }}
+          />
+        </Source>
+      )}
+    </>
   );
 };
 
@@ -178,7 +223,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
   const [selectedMapIncident, setSelectedMapIncident] = useState(null);
   const [selectedResponder, setSelectedResponder] = useState(null);
   const [selectedDispatch, setSelectedDispatch] = useState(null);
-  
+
   const responderBearings = useRef({});
 
   const [activeFilters, setActiveFilters] = useState([]);
@@ -252,7 +297,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
   const responderLogs = responderLogsData || [];
   const emergencyTypes = emergencyTypesData || [];
   const barangays = barangaysData || [];
-  
+
   const barangayBoundariesGeoJSON = useMemo(() => {
     return {
       type: 'FeatureCollection',
@@ -290,19 +335,19 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
   }, [mapIncidents]);
 
   const filteredLocations = useMemo(() => {
-    return uniqueLocations.filter(loc => 
+    return uniqueLocations.filter(loc =>
       String(loc).toLowerCase().includes(locationSearch.toLowerCase())
     );
   }, [uniqueLocations, locationSearch]);
 
   const filteredZones = useMemo(() => {
-    return uniqueZones.filter(z => 
+    return uniqueZones.filter(z =>
       String(z).toLowerCase().includes(zoneSearch.toLowerCase())
     );
   }, [uniqueZones, zoneSearch]);
-  
+
   const filteredEmergencyTypes = useMemo(() => {
-    return emergencyTypes.filter(type => 
+    return emergencyTypes.filter(type =>
       type.name.toLowerCase().includes(typeSearch.toLowerCase())
     );
   }, [emergencyTypes, typeSearch]);
@@ -363,16 +408,16 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
   useEffect(() => {
     if (selectedIncidentForMap && mapRef.current) {
       console.log('Selected Incident for Map:', selectedIncidentForMap);
-      
+
       let lat = parseFloat(selectedIncidentForMap.latitude);
       let lng = parseFloat(selectedIncidentForMap.longitude);
-      
+
       // Fallback if coordinates are nested
       if (isNaN(lat) && selectedIncidentForMap.location) {
         lat = parseFloat(selectedIncidentForMap.location.latitude);
         lng = parseFloat(selectedIncidentForMap.location.longitude);
       }
-      
+
       if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
         try {
           if (mapRef.current.flyTo) {
@@ -385,10 +430,10 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
         }
 
         // Find the corresponding cluster and open its popup
-        const targetCluster = clusteredIncidents.find(cluster => 
+        const targetCluster = clusteredIncidents.find(cluster =>
           cluster.incidentsList.some(inc => (inc.id === selectedIncidentForMap.id || inc.incident_id === selectedIncidentForMap.incident_id))
         );
-        
+
         if (targetCluster) {
           setSelectedMapIncident(targetCluster);
         }
@@ -430,7 +475,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
       <div className={`absolute top-4 left-4 z-[105] flex gap-2 items-center bg-[#111116]/90 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] transition-all overflow-hidden ${isToolbarExpanded ? 'p-2' : 'p-1.5'}`}>
         {isToolbarExpanded ? (
           <>
-            <button 
+            <button
               onClick={() => setIsToolbarExpanded(false)}
               className="flex items-center justify-center w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
               title="Minimize Toolbar"
@@ -439,7 +484,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
             </button>
 
             {/* Toggle Map Markers */}
-            <button 
+            <button
               onClick={() => setShowMapMarkers(!showMapMarkers)}
               className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 rounded-full text-xs font-bold transition-all ${showMapMarkers ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-[#ef4444]/20 border border-[#ef4444]/50 hover:bg-[#ef4444]/30 text-[#ef4444]'}`}
               title={showMapMarkers ? 'Hide Incident Markers' : 'Show Incident Markers'}
@@ -449,13 +494,13 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
             </button>
 
             {/* Main Filters Button */}
-            <button 
+            <button
               onClick={() => setIsFilterModalOpen(true)}
               className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 bg-[#3b82f6] rounded-full text-white text-xs font-bold transition-all hover:bg-[#2563eb]"
             >
               <span className="text-sm">⚙️</span>
-              Filters 
-              {activeFilters.length + activeLocationFilters.length + activeZoneFilters.length > 0 && 
+              Filters
+              {activeFilters.length + activeLocationFilters.length + activeZoneFilters.length > 0 &&
                 <span className="ml-1 px-1.5 py-0.5 bg-white text-[#3b82f6] rounded-full text-[10px] font-black">
                   {activeFilters.length + activeLocationFilters.length + activeZoneFilters.length}
                 </span>
@@ -463,7 +508,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
             </button>
           </>
         ) : (
-          <button 
+          <button
             onClick={() => setIsToolbarExpanded(true)}
             className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
             title="Expand Toolbar"
@@ -506,6 +551,8 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
             }}
           />
 
+
+
           {/* Opol Zones GeoJSON Overlay */}
           <Source id="opol-zones-source" type="geojson" data="/data/opol_zones.geojson">
             <Layer
@@ -533,12 +580,12 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
               type="line"
               paint={{
                 'line-color': '#0a84ff',
-                'line-width': ['case', 
-                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 4, 
+                'line-width': ['case',
+                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 4,
                   1
                 ],
-                'line-opacity': ['case', 
-                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 1, 
+                'line-opacity': ['case',
+                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 1,
                   0.15
                 ]
               }}
@@ -548,8 +595,8 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
               type="fill"
               paint={{
                 'fill-color': '#0a84ff',
-                'fill-opacity': ['case', 
-                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 0.15, 
+                'fill-opacity': ['case',
+                  ['in', ['get', 'name'], ['literal', activeLocationFilters.length > 0 ? activeLocationFilters : ['none']]], 0.15,
                   0
                 ]
               }}
@@ -565,10 +612,10 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
             const activeResp = Object.values(responders).find(
               (r) => r.responderId?.toString() === report.responder_id?.toString()
             );
-            
+
             const currentStatus = activeResp ? (activeResp.status || '').toLowerCase() : '';
             const isResponding = activeResp && !['rejected', 'available', 'offline'].includes(currentStatus);
-            
+
             // Hide static dispatch marker if responder is actively responding (we will draw a destination marker for them)
             if (isResponding) return null;
 
@@ -626,7 +673,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
           {Object.values(responders).map((resp) => {
             const isRecent = new Date() - new Date(resp.updatedAt) < 120000; // 2 minutes (120000ms)
             if (!isRecent) return null;
-            
+
             if ((resp.status || '').toLowerCase() === 'offline') return null;
 
             const respLat = parseFloat(resp.latitude);
@@ -642,12 +689,12 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
               destLat = parseFloat(resp.destLatitude);
               destLng = parseFloat(resp.destLongitude);
             }
-            
+
             // Fallback to checking responder logs
             if (destLat === null || destLng === null || destLat === 0 || destLng === 0) {
               const matchingDispatch = responderLogs.find(
                 (r) => r.responder_id?.toString() === resp.responderId?.toString() &&
-                       (!r.status || r.status.toLowerCase() !== 'rejected')
+                  (!r.status || r.status.toLowerCase() !== 'rejected')
               );
 
               if (matchingDispatch && !isNaN(parseFloat(matchingDispatch.latitude))) {
@@ -694,11 +741,11 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
             let bearing = responderBearings.current[resp.responderId]?.bearing || 0;
             const prevLoc = responderBearings.current[resp.responderId]?.loc;
             if (prevLoc && (prevLoc[0] !== respLng || prevLoc[1] !== respLat)) {
-                bearing = calculateBearing(prevLoc, [respLng, respLat]);
+              bearing = calculateBearing(prevLoc, [respLng, respLat]);
             }
             responderBearings.current[resp.responderId] = {
-                loc: [respLng, respLat],
-                bearing: bearing
+              loc: [respLng, respLat],
+              bearing: bearing
             };
             const rotationAngle = bearing - 135; // Correcting for 3D isometric front-facing angle
 
@@ -742,12 +789,12 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
                     {(() => {
                       const statusColor = currentStatus === 'offline' ? '#8e8e93' : !isResponding ? '#0a84ff' : '#34c759';
                       return (
-                        <div 
-                          className="bg-[#111116]/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded mt-1 whitespace-nowrap z-50 transition-all" 
-                          style={{ 
-                            border: `1px solid ${statusColor}`, 
+                        <div
+                          className="bg-[#111116]/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded mt-1 whitespace-nowrap z-50 transition-all"
+                          style={{
+                            border: `1px solid ${statusColor}`,
                             boxShadow: `0 4px 12px ${statusColor}66`,
-                            transform: isResponding ? 'translateY(-10px)' : 'translateY(4px)' 
+                            transform: isResponding ? 'translateY(-10px)' : 'translateY(4px)'
                           }}
                         >
                           ID {resp.responderId}
@@ -859,14 +906,14 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
           <div className="bg-[#111116] border border-white/10 rounded-2xl w-full max-w-5xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col max-h-[85vh]">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-white/10 bg-white/5">
               <h3 className="m-0 text-white text-lg font-bold flex items-center gap-2">
                 <span className="text-xl">⚙️</span> Filters
               </h3>
               <div className="flex gap-4 items-center">
-                <button 
+                <button
                   onClick={() => {
                     setActiveFilters([]);
                     setActiveLocationFilters([]);
@@ -876,7 +923,7 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
                 >
                   Clear All
                 </button>
-                <button 
+                <button
                   onClick={() => setIsFilterModalOpen(false)}
                   className="text-gray-400 hover:text-white text-2xl leading-none transition-colors"
                 >
@@ -885,9 +932,9 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
               </div>
             </div>
 
-            {/* Modal Body - 3 Columns */}
-            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar flex-1">
-              
+            {/* Modal Body - 2 Columns */}
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto custom-scrollbar flex-1">
+
               {/* Column 1: Emergency Types */}
               <div className="flex flex-col gap-3">
                 <h4 className="text-white text-sm font-bold flex items-center gap-2 m-0">
@@ -895,8 +942,8 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
                 </h4>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Search type..."
                     value={typeSearch}
                     onChange={(e) => setTypeSearch(e.target.value)}
@@ -931,8 +978,8 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
                 </h4>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Search location..."
                     value={locationSearch}
                     onChange={(e) => setLocationSearch(e.target.value)}
@@ -959,48 +1006,11 @@ export default function LiveMonitoring({ responders, selectedIncidentForMap }) {
                   ))}
                 </div>
               </div>
-
-              {/* Column 3: Zones / Purok */}
-              <div className="flex flex-col gap-3">
-                <h4 className="text-white text-sm font-bold flex items-center gap-2 m-0">
-                  <span>🏠</span> Zones / Purok
-                </h4>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-                  <input 
-                    type="text" 
-                    placeholder="Search zone..."
-                    value={zoneSearch}
-                    onChange={(e) => setZoneSearch(e.target.value)}
-                    className="w-full bg-[#1a1a2e] border border-white/10 text-white text-sm rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
-                  />
-                </div>
-                <div className="flex flex-col gap-1 overflow-y-auto max-h-[40vh] custom-scrollbar pr-2">
-                  <button
-                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeZoneFilters.length === 0 ? 'bg-[#3b82f6] text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
-                    onClick={() => setActiveZoneFilters([])}
-                  >
-                    <span className="text-lg">🏠</span> All Zones
-                    {activeZoneFilters.length === 0 && <span className="ml-auto">✔️</span>}
-                  </button>
-                  {filteredZones.map(zone => (
-                    <button
-                      key={zone}
-                      className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${activeZoneFilters.includes(zone) ? 'bg-[#3b82f6]/20 border border-[#3b82f6]/30 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
-                      onClick={() => toggleZoneFilter(zone)}
-                    >
-                      <span className="text-lg">🏘️</span> {zone}
-                      {activeZoneFilters.includes(zone) && <span className="ml-auto text-[#3b82f6]">✔️</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
             </div>
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-white/10 bg-white/5 flex justify-end">
-              <button 
+              <button
                 onClick={() => setIsFilterModalOpen(false)}
                 className="px-6 py-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-xl font-bold transition-colors"
               >

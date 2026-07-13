@@ -90,9 +90,7 @@ export default function Staff1Sidebar({ activeSection, setActiveSection, lowStoc
             </div>
           </div>
 
-          <div className="mt-6 mb-2 px-4">
-            <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">POST-EVENTS</span>
-          </div>
+          
 
           <button
             className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${activeSection === 'pcr' ? 'bg-gradient-to-r from-[rgba(10,132,255,0.15)] to-[rgba(10,132,255,0.05)] text-[#0a84ff] border border-[#0a84ff]/30 shadow-[inset_4px_0_0_#0a84ff]' : 'text-gray-400 hover:text-white hover:bg-[#181822] border border-transparent'}`}
@@ -114,9 +112,7 @@ export default function Staff1Sidebar({ activeSection, setActiveSection, lowStoc
             </span>
           </button>
 
-          <div className="mt-6 mb-2 px-4">
-            <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">RESOURCE DISPATCH</span>
-          </div>
+         
 
 
           

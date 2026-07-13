@@ -24,7 +24,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CallDetectorModule } from 'expo-call-detector';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
-import { savePatientCareRecord, fetchUserProfile, updateIncidentStatus } from '@/services/api';
+import { savePatientCareRecord, fetchUserProfile, updateIncidentStatus, deleteIncident, updateIncidentLocation } from '@/services/api';
 import { getSocket, initializeSocket, setTrackingActive } from '@/services/socket';
 
 import MapboxMap from '@/components/MapboxMap';
@@ -136,6 +136,7 @@ export default function TrackingScreen() {
   const [initialDispatchLocation, setInitialDispatchLocation] = useState<Coordinate | null>(null);
   const [distanceToIncident, setDistanceToIncident] = useState<number | null>(null);
   const [isFirstPersonView, setIsFirstPersonView] = useState(false);
+  const [isAdjustingPin, setIsAdjustingPin] = useState(params.isNewDispatch === 'true');
   const [callTime, setCallTime] = useState('');
 
   // Auto-generate timestamp when mounted
@@ -166,6 +167,25 @@ export default function TrackingScreen() {
 
   // Response Status
   const [incidentStatus, setIncidentStatus] = useState('Assigned');
+
+  // Custom Modal State
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    isDestructive: boolean;
+    onConfirm: () => void;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    cancelText: 'Cancel',
+    isDestructive: false,
+    onConfirm: () => {},
+  });
 
   const { height: screenHeight } = Dimensions.get('window');
   const mapHeightValue = useRef(screenHeight * 0.45);
@@ -319,6 +339,8 @@ export default function TrackingScreen() {
     }
   };
 
+  const [bearing, setBearing] = useState(0);
+
   // Watch position and manage coordinates
   useEffect(() => {
     let locationSubscription: any = null;
@@ -338,7 +360,7 @@ export default function TrackingScreen() {
         if (!initialLoc) {
           // If no last known position, try getCurrentPosition with a short 5-second timeout
           initialLoc = await Promise.race([
-            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Location timeout')), 5000))
           ]);
         }
@@ -398,6 +420,8 @@ export default function TrackingScreen() {
       }
       setIsGeocoding(false);
 
+      let lastLocation = currentLoc;
+
       locationSubscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Highest,
@@ -405,11 +429,32 @@ export default function TrackingScreen() {
           distanceInterval: 1,
         },
         (newLoc) => {
+          // Reject inaccurate GPS readings (>15 meters)
+          if (newLoc.coords.accuracy && newLoc.coords.accuracy > 15) {
+            console.warn(`[GPS] Rejected inaccurate location update (Accuracy: ${newLoc.coords.accuracy.toFixed(1)}m)`);
+            return;
+          }
           if (!isSimulating) {
-            setResponderLocation({
+            const lat1 = lastLocation.latitude * (Math.PI / 180);
+            const lon1 = lastLocation.longitude * (Math.PI / 180);
+            const lat2 = newLoc.coords.latitude * (Math.PI / 180);
+            const lon2 = newLoc.coords.longitude * (Math.PI / 180);
+
+            const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+            let calcBearing = Math.atan2(y, x) * (180 / Math.PI);
+            calcBearing = (calcBearing + 360) % 360;
+
+            if (getDistance(lastLocation.latitude, lastLocation.longitude, newLoc.coords.latitude, newLoc.coords.longitude) > 0.002) {
+                setBearing(calcBearing);
+            }
+
+            const updatedLoc = {
               latitude: newLoc.coords.latitude,
               longitude: newLoc.coords.longitude,
-            });
+            };
+            setResponderLocation(updatedLoc);
+            lastLocation = updatedLoc;
           }
         }
       );
@@ -646,8 +691,17 @@ export default function TrackingScreen() {
                   isOffRoute={isOffRoute}
                   boundaryPolygon={boundaryPolygon}
                   isFirstPersonView={isFirstPersonView}
+                  bearing={bearing}
+                  isWithinRadius={distanceToIncident !== null && distanceToIncident <= 100}
                   onRouteUpdate={handleRouteUpdate}
+                  onCallerLocationAdjust={isAdjustingPin ? (coord) => {
+                    setCallerLocation(coord);
+                    setIncidentLocation(coord);
+                  } : undefined}
                 />
+
+                {/* Pin Adjustment Banner */}
+                
 
                 {/* Floating OSRM Simulator Buttons inside top-right of Map */}
                 <View style={styles.simPanel}>
@@ -657,14 +711,6 @@ export default function TrackingScreen() {
                   >
                     <Ionicons name="compass" size={12} color={isFirstPersonView ? '#fff' : '#0a84ff'} style={{ marginRight: 4 }} />
                     <Text style={[styles.simText, { color: isFirstPersonView ? '#fff' : '#0a84ff' }]}>3D View</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.simBtn} onPress={startSimulation}>
-                    <Ionicons name="play" size={12} color="#0a84ff" style={{ marginRight: 4 }} />
-                    <Text style={styles.simText}>Ride Sim</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.simBtn} onPress={simulateOffRoute}>
-                    <Ionicons name="shuffle" size={12} color="#0a84ff" style={{ marginRight: 4 }} />
-                    <Text style={styles.simText}>Dev Off-Route</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -777,22 +823,34 @@ export default function TrackingScreen() {
               <TouchableOpacity 
                 style={[styles.submitButton, { flex: 1, backgroundColor: '#8e8e93', shadowColor: '#8e8e93' }]}
                 onPress={() => {
-                  Alert.alert('Reject Dispatch', 'Are you sure you want to reject this dispatch and remove it from your screen?', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Reject', style: 'destructive', onPress: async () => {
+                  setConfirmModalConfig({
+                    visible: true,
+                    title: 'Reject Dispatch',
+                    message: 'Are you sure you want to reject this dispatch and remove it from your screen?',
+                    confirmText: 'Reject',
+                    cancelText: 'Cancel',
+                    isDestructive: true,
+                    onConfirm: async () => {
                       const idToUpdate = dbIncidentId || callerInfo.id;
                       if (idToUpdate) {
                         try {
-                          await updateIncidentStatus(Number(idToUpdate), 'Rejected');
+                          await deleteIncident(Number(idToUpdate));
+                          emitIncidentUpdate({ id: idToUpdate, status: 'deleted' });
                         } catch (e) {
-                          console.warn('Failed to reject on server:', e);
+                          console.warn('Failed to delete on server:', e);
                         }
                       }
+                      
+                      // Also hang up the phone call automatically if it's still active
+                      try {
+                        CallDetectorModule.disconnectCall();
+                      } catch(err) {}
+
                       setIsActiveCall(false);
                       setIsSimulating(false);
                       setIncidentStatus('Stand By');
-                    }}
-                  ]);
+                    }
+                  });
                 }}
               >
                 <Ionicons name="close-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
@@ -829,65 +887,79 @@ export default function TrackingScreen() {
                 style={[
                   styles.submitButton, 
                   { 
-                    backgroundColor: distanceToIncident !== null && distanceToIncident <= (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 1609) ? '#ff453a' : '#555', 
-                    shadowColor: distanceToIncident !== null && distanceToIncident <= (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 1609) ? '#ff453a' : 'transparent' 
+                    backgroundColor: distanceToIncident !== null && distanceToIncident <= (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 100) ? '#ff453a' : '#555', 
+                    shadowColor: distanceToIncident !== null && distanceToIncident <= (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 100) ? '#ff453a' : 'transparent' 
                   }
                 ]}
-                disabled={distanceToIncident === null || distanceToIncident > (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 1609)}
+                disabled={distanceToIncident === null || distanceToIncident > (incidentLocation?.radiusKm ? incidentLocation.radiusKm * 1000 : 100)}
                 onPress={() => {
-                  Alert.alert(
-                    "Confirm Arrival",
-                    "Are you sure you have arrived at the incident location?",
-                    [
-                      { text: "Cancel", style: "cancel" },                       { 
-                        text: "Yes, Arrived", 
-                        onPress: async () => {
-                          setIncidentStatus('On Scene');
-                          FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'onSceneTime.txt', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })).catch(() => {});
-                          setIsRespondingRoute(false);
-                          setRouteCoordinates([]);
-                          setRouteSteps([]);
-                          speakGuidance('You have successfully arrived at the scene.');
-                          Speech.stop();
-                          setIsActiveCall(false);
+                  setConfirmModalConfig({
+                    visible: true,
+                    title: 'Confirm Arrival',
+                    message: 'Are you sure you have arrived at the incident location?',
+                    confirmText: 'Yes, Arrived',
+                    cancelText: 'Cancel',
+                    isDestructive: false,
+                    onConfirm: async () => {
+                      setIncidentStatus('On Scene');
+                      FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'onSceneTime.txt', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })).catch(() => {});
+                      setIsRespondingRoute(false);
+                      setRouteCoordinates([]);
+                      setRouteSteps([]);
+                      speakGuidance('You have successfully arrived at the scene.');
+                      Speech.stop();
+                      setIsActiveCall(false);
 
-                          // Mark incident as completed in the backend
-                          const idToUpdate = dbIncidentId || callerInfo.id;
-                          if (idToUpdate) {
-                            try {
-                              await updateIncidentStatus(Number(idToUpdate), 'completed');
-                            } catch (e) {
-                              console.warn('Failed to mark incident as completed:', e);
-                            }
-                          }
-
-                          let actualLocationName = '';
+                      // Mark incident as completed in the backend
+                      const idToUpdate = dbIncidentId || callerInfo.id;
+                      if (idToUpdate) {
+                        try {
+                          await updateIncidentStatus(Number(idToUpdate), 'completed');
+                          
+                          // Update location to where the responder arrived
                           if (responderLocation) {
-                            const name = await reverseGeocode(responderLocation.latitude, responderLocation.longitude);
-                            if (name) actualLocationName = name;
+                            await updateIncidentLocation(Number(idToUpdate), responderLocation.latitude, responderLocation.longitude);
+                            // Also emit the updated incident with the new coordinates
+                            emitIncidentUpdate({ 
+                              id: idToUpdate, 
+                              status: 'completed', 
+                              latitude: responderLocation.latitude, 
+                              longitude: responderLocation.longitude 
+                            });
+                          } else {
+                            emitIncidentUpdate({ id: idToUpdate, status: 'completed' });
                           }
-
-                          router.push({
-                            pathname: '/(tabs)/pcr',
-                            params: {
-                              callerInfo: JSON.stringify(callerInfo),
-                              accidentAddress: accidentAddress,
-                              actualIncidentAddress: actualLocationName,
-                              actualArrivalLat: responderLocation?.latitude?.toString() || '',
-                              actualArrivalLng: responderLocation?.longitude?.toString() || '',
-                              emergencyType: emergencyType,
-                              barangay: barangay,
-                              purok: purok,
-                              landmark: landmark,
-                              callerType: callerType,
-                              isRegistered: isRegistered ? 'true' : 'false',
-                              callerLocation: passedCallerLocation ? JSON.stringify(passedCallerLocation) : '',
-                            },
-                          });
+                          
+                        } catch (e) {
+                          console.warn('Failed to mark incident as completed:', e);
                         }
                       }
-                    ]
-                  );
+
+                      let actualLocationName = '';
+                      if (responderLocation) {
+                        const name = await reverseGeocode(responderLocation.latitude, responderLocation.longitude);
+                        if (name) actualLocationName = name;
+                      }
+
+                      router.push({
+                        pathname: '/(tabs)/pcr',
+                        params: {
+                          callerInfo: JSON.stringify(callerInfo),
+                          accidentAddress: accidentAddress,
+                          actualIncidentAddress: actualLocationName,
+                          actualArrivalLat: responderLocation?.latitude?.toString() || '',
+                          actualArrivalLng: responderLocation?.longitude?.toString() || '',
+                          emergencyType: emergencyType,
+                          barangay: barangay,
+                          purok: purok,
+                          landmark: landmark,
+                          callerType: callerType,
+                          isRegistered: isRegistered ? 'true' : 'false',
+                          callerLocation: passedCallerLocation ? JSON.stringify(passedCallerLocation) : '',
+                        },
+                      });
+                    }
+                  });
                 }}
               >
                 <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
@@ -900,9 +972,75 @@ export default function TrackingScreen() {
         </View>
 
       {/* Incident Area Selection Modal removed */}
+      {/* Custom Confirmation Modal */}
+      <ConfirmModal
+        visible={confirmModalConfig.visible}
+        title={confirmModalConfig.title}
+        message={confirmModalConfig.message}
+        confirmText={confirmModalConfig.confirmText}
+        cancelText={confirmModalConfig.cancelText}
+        isDestructive={confirmModalConfig.isDestructive}
+        onConfirm={confirmModalConfig.onConfirm}
+        onCancel={() => setConfirmModalConfig(prev => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }
+
+const ConfirmModal = ({ 
+  visible, 
+  title, 
+  message, 
+  confirmText, 
+  cancelText, 
+  isDestructive, 
+  onConfirm, 
+  onCancel 
+}: { 
+  visible: boolean, 
+  title: string, 
+  message: string, 
+  confirmText: string, 
+  cancelText: string, 
+  isDestructive: boolean, 
+  onConfirm: () => void, 
+  onCancel: () => void 
+}) => {
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <View style={{ backgroundColor: '#111116', width: '100%', borderRadius: 28, padding: 24, borderWidth: 1, borderColor: '#1f1f26', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20 }}>
+          
+          <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: isDestructive ? 'rgba(239, 69, 68, 0.15)' : 'rgba(52, 199, 89, 0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+            <Ionicons name={isDestructive ? "warning" : "checkmark-circle"} size={28} color={isDestructive ? "#ef4544" : "#34c759"} />
+          </View>
+          
+          <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 12 }}>{title}</Text>
+          <Text style={{ color: '#8e8e93', fontSize: 16, fontWeight: '500', lineHeight: 24, marginBottom: 32 }}>{message}</Text>
+          
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <TouchableOpacity 
+              style={{ flex: 1, paddingVertical: 16, borderRadius: 16, backgroundColor: '#1f1f26', alignItems: 'center' }} 
+              onPress={onCancel}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{cancelText}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={{ flex: 1, paddingVertical: 16, borderRadius: 16, backgroundColor: isDestructive ? '#ef4544' : '#34c759', alignItems: 'center' }} 
+              onPress={() => { onConfirm(); onCancel(); }}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   screen: {
@@ -1595,5 +1733,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  adjustPinBanner: {
+    position: 'absolute',
+    top: 40,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0a84ff',
+    shadowColor: '#0a84ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    zIndex: 1000,
+  },
+  adjustPinTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  adjustPinSubtitle: { color: '#8e8e93', fontSize: 12, marginTop: 4 },
+  confirmPinBtn: { backgroundColor: '#0a84ff', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
+  confirmPinText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 });
 

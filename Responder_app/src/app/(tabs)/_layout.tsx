@@ -59,11 +59,13 @@ export default function TabsLayout() {
 
       locationSubscription = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: Location.Accuracy.Highest,
           timeInterval: 5000,
           distanceInterval: 10,
         },
         (newLoc) => {
+          // Reject inaccurate GPS readings (>15 meters)
+          if (newLoc.coords.accuracy && newLoc.coords.accuracy > 15) return;
           currentLoc = {
             latitude: newLoc.coords.latitude,
             longitude: newLoc.coords.longitude,

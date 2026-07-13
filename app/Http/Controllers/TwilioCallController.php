@@ -91,7 +91,7 @@ class TwilioCallController extends Controller
         ]);
         
         \App\Models\IncidentLocation::create([
-            'incident_report_id' => $incident->id
+            'incident_detail_id' => $incident->id
         ]);
         
         // Notify Socket.IO Server so the Responder App call screen pops up immediately!
@@ -154,39 +154,53 @@ class TwilioCallController extends Controller
             return response()->json(['isRegistered' => false, 'resident' => null]);
         }
 
-        // Clean phone number formats
-        $cleanPhone = str_replace([' ', '-', '(', ')'], '', $phone);
-        
-        $resident = User::where('phone_number', 'LIKE', '%' . substr($cleanPhone, -10))->where('role', 'resident')->first();
+        // Normalize phone number for flexible matching
+        $cleanPhone = preg_replace('/[^0-9]/', '', $phone); // digits only
+        $last10 = substr($cleanPhone, -10);
+
+        $resident = User::where('role', 'resident')
+            ->where(function($q) use ($last10) {
+                $q->where('phone_number', 'LIKE', '%' . $last10)
+                  ->orWhere('phone_number', 'LIKE', $last10 . '%');
+            })
+            ->first();
 
         if ($resident) {
+            // Use model accessor (handles trim, middle name, etc.)
+            $fullName = $resident->full_name;
+
+            // If the stored name is still the default placeholder, check if responder
+            // typed a real name on a past call (stored on a previous incident's user)
+            if (!$fullName || in_array(trim($fullName), ['Unknown Caller', 'Unknown', ''])) {
+                // Look for the most recent incident linked to this user that has a real name
+                $latestIncident = \App\Models\IncidentDetail::where('user_id', $resident->id)
+                    ->with('user')
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
+                if ($latestIncident && $latestIncident->user) {
+                    $incidentName = $latestIncident->user->full_name;
+                    if ($incidentName && !in_array(trim($incidentName), ['Unknown Caller', 'Unknown', ''])) {
+                        $fullName = $incidentName;
+                    }
+                }
+            }
+
+            // Extract first and last name from the full name for the separated fields
+            $parts = explode(' ', trim($fullName), 2);
+            $firstName = $parts[0] ?? '';
+            $lastName = $parts[1] ?? '';
+
             return response()->json([
                 'isRegistered' => true,
                 'resident' => [
-                    'full_name' => $resident->first_name . ' ' . $resident->last_name,
+                    'full_name'    => trim($fullName) ?: '',
+                    'first_name'   => $firstName,
+                    'last_name'    => $lastName,
                     'phone_number' => $resident->phone_number,
-                    'latitude' => null,
-                    'longitude' => null,
-                    'address' => $resident->address
-                ]
-            ]);
-        }
-
-        // If not registered, check if they called before (Incident Reports history)
-        $pastIncident = IncidentDetail::where('caller_number', 'LIKE', '%' . substr($cleanPhone, -10))
-            ->whereNotNull('caller_name')
-            ->orderBy('created_at', 'desc')
-            ->first();
-
-        if ($pastIncident && $pastIncident->caller_name && $pastIncident->caller_name !== 'Visitor') {
-             return response()->json([
-                'isRegistered' => false,
-                'resident' => [
-                    'full_name' => $pastIncident->caller_name,
-                    'phone_number' => $phone,
-                    'latitude' => $pastIncident->latitude,
-                    'longitude' => $pastIncident->longitude,
-                    'address' => $pastIncident->location ?? 'Previous Caller Location'
+                    'latitude'     => null,
+                    'longitude'    => null,
+                    'address'      => $resident->address
                 ]
             ]);
         }

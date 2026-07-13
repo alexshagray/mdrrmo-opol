@@ -22,11 +22,11 @@ function IncidentCard({ inc, onClick }) {
           style={{ backgroundColor: inc.emergency_type?.color_hex || '#a855f7', boxShadow: `0 0 8px ${inc.emergency_type?.color_hex || '#a855f7'}80` }}
         />
         <div>
-          <div className="flex items-center gap-2">
-            <strong className="text-sm" style={{ color: inc.emergency_type?.color_hex || '#e5e7eb' }}>
+          <div className="flex flex-col items-start mb-1">
+            <strong className="text-sm leading-tight" style={{ color: inc.emergency_type?.color_hex || '#e5e7eb' }}>
               {inc.emergency_type?.emoji_icon} {inc.emergency_type?.name || 'Emergency'}
             </strong>
-            <span className="text-[10px] text-gray-500 uppercase">{inc.incident_id}</span>
+            <span className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">{inc.incident_id}</span>
           </div>
           <div className="text-[11px] text-gray-400 mt-1">
             📍 {barangayName || 'Unknown location'}
@@ -118,7 +118,7 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
       {/* Main Grid */}
       <div className="grid grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-[700px]">
         {/* Map Column */}
-        <div className="col-span-12 lg:col-span-8 h-full flex flex-col gap-6 min-h-0">
+        <div className="col-span-12 lg:col-span-8 h-full flex flex-col gap-6 min-h-0 order-2">
           <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex-1 flex flex-col relative overflow-hidden min-h-0">
             <div className="flex justify-between items-center mb-4 z-10 relative">
               <h3 className="m-0 text-sm font-bold text-gray-300 flex items-center gap-2">
@@ -133,7 +133,7 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
         </div>
 
         {/* Sidebar Tabs */}
-        <div className="col-span-12 lg:col-span-4 h-full flex flex-col gap-6 min-h-0">
+        <div className="col-span-12 lg:col-span-4 h-full flex flex-col gap-6 min-h-0 order-1">
           <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex-1 flex flex-col relative overflow-hidden min-h-0">
             {/* Tabs */}
             <div className="flex gap-3 mb-4 border-b border-[#1f1f26] pb-2 flex-wrap">
@@ -239,12 +239,22 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
                   </div>
                 ) : (
                   Object.values(responders).map(resp => (
-                    <div key={resp.responderId} className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-colors">
+                    <div 
+                      key={resp.responderId} 
+                      onClick={() => {
+                        let lat = parseFloat(resp.latitude);
+                        let lng = parseFloat(resp.longitude);
+                        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                          setSelectedIncidentForMap({ id: `resp-${resp.responderId}`, latitude: lat, longitude: lng, isResponderFocus: true });
+                        }
+                      }}
+                      className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                    >
                       <div className="flex items-start gap-3">
                         <div className="w-2.5 h-2.5 rounded-full mt-1 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
                         <div>
                           <div className="flex items-center gap-2">
-                            <strong className="text-gray-200 text-sm">Responder {resp.responderId}</strong>
+                            <strong className="text-gray-200 text-sm">{resp.responderName || `Responder ${resp.responderId}`}</strong>
                             {resp.incidentId && <span className="text-[10px] text-gray-500 uppercase">To: {resp.incidentId}</span>}
                           </div>
                           <div className="text-[11px] text-gray-400 mt-1">
