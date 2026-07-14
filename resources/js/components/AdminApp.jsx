@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import AdminNavbar from './Admin/AdminNavbar';
 import UserManagement from './Admin/UserManagement';
-import RespondersManager from './Shared/RespondersManager';
 import EventsManager from './Staff1/EventsManager';
 import AdminDashboard from './Admin/AdminDashboard';
+import ReportsTable from './Admin/ReportsTable';
 
 export default function AdminApp() {
     const [token, setToken] = useState(localStorage.getItem('admin_token') || null);
@@ -47,17 +47,40 @@ export default function AdminApp() {
     const [currentNotification, setCurrentNotification] = useState(null);
     const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
+    const [showReportsMenu, setShowReportsMenu] = useState(false);
+    const reportsDropdownRef = useRef(null);
+
+    // Close reports menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (reportsDropdownRef.current && !reportsDropdownRef.current.contains(event.target)) {
+                setShowReportsMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Fetch notifications and listen to socket for updates
     useEffect(() => {
         const fetchNotifications = async () => {
             try {
-                const res = await fetch('/api/notifications');
+                const res = await fetch('/api/notifications', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 const data = await res.json();
                 setNotifications(data);
 
-                const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-                const unreadAlerts = data.filter(n => n.type === 'event_alert' && !readIds.includes(n.id));
+                const today = new Date().toISOString().split('T')[0];
+                const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+                if (readData.date !== today) {
+                    readData.date = today;
+                    readData.ids = [];
+                    localStorage.setItem('readNotificationsData', JSON.stringify(readData));
+                }
+
+                const readIds = readData.ids;
+                const unreadAlerts = data.filter(n => !readIds.includes(n.id));
                 
                 if (unreadAlerts.length > 0) {
                     setCurrentNotification(unreadAlerts[0]);
@@ -68,7 +91,7 @@ export default function AdminApp() {
             }
         };
         
-        fetchNotifications();
+        if (token) fetchNotifications();
         
         const socket = io(`http://${window.location.hostname}:3000`);
         socket.on('new_notification', fetchNotifications);
@@ -81,59 +104,49 @@ export default function AdminApp() {
 
     const dismissNotification = () => {
         if (currentNotification) {
-            const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-            if (!readIds.includes(currentNotification.id)) {
-                readIds.push(currentNotification.id);
-                localStorage.setItem('readNotifications', JSON.stringify(readIds));
+            const today = new Date().toISOString().split('T')[0];
+            const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+            if (readData.date !== today) {
+                readData.date = today;
+                readData.ids = [];
             }
-        }
-        setShowNotificationModal(false);
-        setCurrentNotification(null);
-    };
+            
+            if (!readData.ids.includes(currentNotification.id)) {
+                readData.ids.push(currentNotification.id);
+                localStorage.setItem('readNotificationsData', JSON.stringify(readData));
+            }
 
-    const generatePDFReport = (n) => {
-        const element = document.createElement('div');
-        element.innerHTML = `
-            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; max-width: 800px; margin: 0 auto;">
-                <h2 style="text-align: center; color: #111; margin-bottom: 5px;">INVENTORY SUBMISSION REPORT</h2>
-                <p style="text-align: center; color: #666; margin-top: 0;">MDRRMO Management System</p>
-                <hr style="border: 1px solid #ddd; margin: 20px 0;" />
-                <p><strong>Submitted on:</strong> ${new Date(n.created_at).toLocaleString()}</p>
-                <div style="margin-top: 30px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; padding: 20px; background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;">
-                    ${n.message}
-                </div>
-                <hr style="border: 1px solid #ddd; margin-top: 50px; margin-bottom: 20px;" />
-                <p style="text-align: center; font-size: 10px; color: #777;">Auto-generated by Admin Control Center</p>
-            </div>
-        `;
-        
-        const opt = {
-            margin:       0.5,
-            filename:     `inventory_report_submission_${new Date(n.created_at).toISOString().split('T')[0]}.pdf`,
-            image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2 },
-            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-
-        if (window.html2pdf) {
-            window.html2pdf().set(opt).from(element).outputPdf('datauristring').then(function(pdfAsString) {
-                setPdfPreviewUrl(pdfAsString);
-            });
+            // Find next unread notification
+            const nextUnread = notifications.find(n => !readData.ids.includes(n.id));
+            if (nextUnread) {
+                setCurrentNotification(nextUnread);
+            } else {
+                setShowNotificationModal(false);
+                setCurrentNotification(null);
+            }
         } else {
-            console.error('html2pdf is not loaded');
-            alert('Failed to generate PDF. Tool is missing.');
+            setShowNotificationModal(false);
+            setCurrentNotification(null);
         }
     };
+
+
 
     const handleNotificationClick = (n) => {
-        const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-        if (!readIds.includes(n.id)) {
-            readIds.push(n.id);
-            localStorage.setItem('readNotifications', JSON.stringify(readIds));
+        const today = new Date().toISOString().split('T')[0];
+        const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+        if (readData.date !== today) {
+            readData.date = today;
+            readData.ids = [];
         }
 
-        if (n.title === 'Inventory Report Submission') {
-            generatePDFReport(n);
+        if (!readData.ids.includes(n.id)) {
+            readData.ids.push(n.id);
+            localStorage.setItem('readNotificationsData', JSON.stringify(readData));
+        }
+
+        if (n.type === 'report' && n.payload?.url) {
+            setPdfPreviewUrl(n.payload.url);
         } else {
             setCurrentNotification(n);
             setShowNotificationModal(true);
@@ -363,8 +376,8 @@ export default function AdminApp() {
             />
 
             {/* Admin Tabs */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 mb-4 relative z-10 overflow-x-auto custom-scrollbar pb-2">
-                <div className="flex space-x-2 p-1 bg-[#111116] border border-[#1f1f26] rounded-xl w-fit min-w-max">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 mb-4 relative z-50">
+                <div className="flex flex-wrap gap-2 p-1 bg-[#111116] border border-[#1f1f26] rounded-xl w-fit">
                     <button
                         onClick={() => setActiveSection('dashboard')}
                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
@@ -385,16 +398,7 @@ export default function AdminApp() {
                     >
                         User Management
                     </button>
-                    <button
-                        onClick={() => setActiveSection('personnel')}
-                        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                            activeSection === 'personnel' 
-                                ? 'bg-gradient-to-r from-[#0a84ff] to-[#005bb5] text-white shadow-lg shadow-[#0a84ff]/20' 
-                                : 'text-gray-400 hover:text-white hover:bg-[#181822]'
-                        }`}
-                    >
-                        Personnel Availability
-                    </button>
+
                     <button
                         onClick={() => setActiveSection('events')}
                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
@@ -403,26 +407,76 @@ export default function AdminApp() {
                                 : 'text-gray-400 hover:text-white hover:bg-[#181822]'
                         }`}
                     >
-                        Events
+                        Events & Announcements
                     </button>
+                    
+                    {/* Reports Dropdown Tab */}
+                    <div className="relative group" ref={reportsDropdownRef}>
+                        <button
+                            onClick={() => {
+                                if (!activeSection.startsWith('reports')) {
+                                    setActiveSection('reports-inventory');
+                                }
+                                setShowReportsMenu(!showReportsMenu);
+                            }}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                                activeSection.startsWith('reports')
+                                    ? 'bg-gradient-to-r from-[#0a84ff] to-[#005bb5] text-white shadow-lg shadow-[#0a84ff]/20' 
+                                    : 'text-gray-400 hover:text-white hover:bg-[#181822]'
+                            }`}
+                        >
+                            Reports ▾
+                        </button>
+                        
+                        {showReportsMenu && (
+                            <div className="absolute left-0 top-full mt-1 w-48 bg-[#111116] border border-[#1f1f26] rounded-xl shadow-xl z-50 overflow-hidden transform origin-top transition-all">
+                                <button
+                                    onClick={() => {
+                                        setActiveSection('reports-inventory');
+                                        setShowReportsMenu(false);
+                                    }}
+                                    className={`w-full text-left px-4 py-3 text-sm font-semibold transition-colors ${
+                                        activeSection === 'reports-inventory' ? 'bg-[#0a84ff]/10 text-[#0a84ff]' : 'text-gray-300 hover:bg-[#181822] hover:text-white'
+                                    }`}
+                                >
+                                    Inventory Reports
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setActiveSection('reports-incident');
+                                        setShowReportsMenu(false);
+                                    }}
+                                    className={`w-full text-left px-4 py-3 text-sm font-semibold transition-colors ${
+                                        activeSection === 'reports-incident' ? 'bg-[#0a84ff]/10 text-[#0a84ff]' : 'text-gray-300 hover:bg-[#181822] hover:text-white'
+                                    }`}
+                                >
+                                    Incident Reports
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             <div className="relative z-10">
                 {activeSection === 'dashboard' && <AdminDashboard setActiveSection={setActiveSection} />}
                 {activeSection === 'users' && <UserManagement token={token} handleLogout={handleLogout} />}
-                {activeSection === 'personnel' && (
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="bg-[#111115] border border-[#1f1f26] rounded-2xl overflow-hidden p-6 mt-2 shadow-2xl">
-                            <RespondersManager />
-                        </div>
-                    </div>
-                )}
+
                 {activeSection === 'events' && (
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="mt-2">
                             <EventsManager role="Admin" />
                         </div>
+                    </div>
+                )}
+                {activeSection === 'reports-inventory' && (
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2">
+                        <ReportsTable type="inventory" />
+                    </div>
+                )}
+                {activeSection === 'reports-incident' && (
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2">
+                        <ReportsTable type="incident" />
                     </div>
                 )}
             </div>
@@ -437,17 +491,17 @@ export default function AdminApp() {
                         </div>
                         <div className="p-6">
                             <h4 className="m-0 mb-2.5 text-white text-base font-semibold">{currentNotification.title}</h4>
-                            {currentNotification.title === 'Inventory Report Submission' ? (
+                            {currentNotification.type === 'report' ? (
                                 <p className="m-0 text-slate-300 text-sm leading-relaxed">
-                                    An inventory report has been submitted by Staff. You can download and view the details in PDF format.
+                                    A new report has been submitted by Staff. You can download and view the details in PDF format.
                                 </p>
                             ) : (
                                 <p className="m-0 text-slate-300 text-sm leading-relaxed">{currentNotification.message}</p>
                             )}
                         </div>
                         <div className="p-5 border-t border-[#2d3748]">
-                            {currentNotification.title === 'Inventory Report Submission' ? (
-                                <button onClick={() => { generatePDFReport(currentNotification); dismissNotification(); }} className="w-full bg-[#e11d48] hover:bg-[#be123c] text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg cursor-pointer">
+                            {currentNotification.type === 'report' ? (
+                                <button onClick={() => { setPdfPreviewUrl(currentNotification.payload?.url); dismissNotification(); }} className="w-full bg-[#e11d48] hover:bg-[#be123c] text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg cursor-pointer">
                                     📄 View PDF Report
                                 </button>
                             ) : (

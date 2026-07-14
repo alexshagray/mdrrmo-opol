@@ -51,7 +51,7 @@ export const deleteStorageItem = async (key: string) => {
 // --- CHOOSE YOUR CONNECTION METHOD (Uncomment the one you want to use) ---
 
 // Option 1: Localtunnel (Works anywhere over the internet)
-const API_BASE_URL = 'https://cyan-colts-slide.loca.lt/api';
+const API_BASE_URL = 'https://mdrrmo-api.loca.lt/api';
 
 // Option 2: Local Wi-Fi Network (Requires phone and PC on same Wi-Fi)
 // const API_BASE_URL = Platform.OS === 'web'
@@ -141,10 +141,12 @@ export const loginUser = async (email: string, password: string) => {
     return response.data;
   } catch (error: any) {
     if (!error.response) {
-      throw new Error('Network error. Cannot connect to server. Please check Windows Firewall.');
+      throw new Error('Network error. Cannot connect to server. Please check Windows Firewall or your internet connection.');
     }
-    const errorMsg = error.response?.data?.message || 'Login failed. Please check your credentials.';
-    throw new Error(errorMsg);
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw new Error(`Server returned error ${error.response.status}. The API URL might be incorrect or offline.`);
   }
 };
 
@@ -157,10 +159,16 @@ export const registerUser = async (name: string, email: string, password: string
     return response.data;
   } catch (error: any) {
     if (!error.response) {
-      throw new Error('Network error. Cannot connect to server. Please check Windows Firewall.');
+      throw new Error('Network error. Cannot connect to server. Please check Windows Firewall or your internet connection.');
     }
-    const errorMsg = error.response?.data?.message || 'Registration failed. Please check your details.';
-    throw new Error(errorMsg);
+    
+    // If Laravel returned a proper validation error message
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    
+    // If we received an HTML page (like a 404 Tunnel Not Found or 500 Server Error)
+    throw new Error(`Server returned error ${error.response.status}. The API URL might be incorrect or offline.`);
   }
 };
 

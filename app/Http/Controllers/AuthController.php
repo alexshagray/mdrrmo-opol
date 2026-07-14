@@ -67,6 +67,12 @@ class AuthController extends Controller
             ], 403);
         }
         
+        // Update duty status for responders/staff
+        if (in_array($user->role, ['responder', 'staff1', 'staff2', 'admin'])) {
+            $user->duty_status = 'online';
+            $user->save();
+        }
+
         // Revoke previous tokens to enforce single-device session if preferred
         $user->tokens()->delete();
 
@@ -92,6 +98,12 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
+        $user = $request->user();
+        if ($user && in_array($user->role, ['responder', 'staff1', 'staff2', 'admin'])) {
+            $user->duty_status = 'offline';
+            $user->save();
+        }
+
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([

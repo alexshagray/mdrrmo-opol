@@ -465,7 +465,38 @@ export default function Pcr({ setNotifications }) {
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
 
-    window.html2pdf().from(element).set(opt).save();
+    window.html2pdf().set(opt).from(element).outputPdf('blob').then(async function(pdfBlob) {
+      try {
+        let generatedBy = "Staff (Incident)";
+        const token = localStorage.getItem('staff2_token') || localStorage.getItem('staff1_token') || localStorage.getItem('admin_token');
+        if (token) {
+          const res = await fetch('/api/user', { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
+          const userData = await res.json();
+          if (userData && userData.first_name) {
+            generatedBy = `${userData.first_name} ${userData.last_name}`.trim();
+          }
+        }
+        
+        const formData = new FormData();
+        formData.append('file', pdfBlob, opt.filename);
+        formData.append('type', 'incident');
+        formData.append('title', 'Patient Care Report');
+        formData.append('generated_by', generatedBy);
+
+        await fetch('/api/reports/upload', {
+          method: 'POST',
+          body: formData
+        });
+      } catch (err) {
+        console.warn('Failed to upload report to server:', err);
+      }
+      
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = opt.filename;
+      a.click();
+    });
   };
 
   if (isLoading && pcrReports.length === 0) {

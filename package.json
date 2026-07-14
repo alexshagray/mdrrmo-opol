@@ -17,6 +17,7 @@
     "vite": "^8.0.0"
   },
   "dependencies": {
+    "@rnmapbox/maps": "^10.3.2",
     "@tanstack/react-query": "^5.101.1",
     "core-js": "^3.49.0",
     "cors": "^2.8.6",
@@ -24,11 +25,10 @@
     "express": "^5.2.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
-    "mapbox-gl": "^3.25.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-map-gl": "^8.1.1",
     "react-native": "0.85.3",
+    "react-native-agora": "^4.6.2",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "xlsx": "^0.18.5"

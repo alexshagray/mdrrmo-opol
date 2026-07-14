@@ -12,13 +12,57 @@ class IncidentDetailController extends Controller
 {
     public function index(Request $request)
     {
-        $query = IncidentDetail::with(['user', 'location', 'emergencyType'])->latest();
+        $query = IncidentDetail::with(['user', 'location.barangayModel', 'emergencyType', 'responderLogs.responder'])->latest();
         
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
+
+        if ($request->has('search') && !empty($request->search)) {
+            $search = strtolower($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('incident_id', 'LIKE', "%{$search}%")
+                  ->orWhere('status', 'LIKE', "%{$search}%")
+                  ->orWhereHas('user', function ($q2) use ($search) {
+                      $q2->whereRaw("LOWER(CONCAT(first_name, ' ', last_name)) LIKE ?", ["%{$search}%"])
+                         ->orWhere('phone_number', 'LIKE', "%{$search}%");
+                  })
+                  ->orWhereHas('emergencyType', function ($q3) use ($search) {
+                      $q3->whereRaw("LOWER(emergency_name) LIKE ?", ["%{$search}%"]);
+                  })
+                  ->orWhereHas('location', function ($q4) use ($search) {
+                      $q4->whereRaw("LOWER(location) LIKE ?", ["%{$search}%"])
+                         ->orWhereHas('barangayModel', function ($q4_1) use ($search) {
+                             $q4_1->whereRaw("LOWER(barangay_name) LIKE ?", ["%{$search}%"]);
+                         });
+                  })
+                  ->orWhereHas('responderLogs.responder', function ($q5) use ($search) {
+                      $q5->whereRaw("LOWER(CONCAT(first_name, ' ', last_name)) LIKE ?", ["%{$search}%"]);
+                  });
+            });
+        }
+
+        if ($request->has('date_filter') && !empty($request->date_filter) && $request->date_filter !== 'all') {
+            $filter = $request->date_filter;
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filter)) {
+                // Exact Date Match (ignores time)
+                $query->whereDate('created_at', $filter);
+            } else {
+                // Legacy preset fallbacks
+                if ($filter === 'today') {
+                    $query->whereDate('created_at', today());
+                } elseif ($filter === 'this_week') {
+                    $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+                } elseif ($filter === 'this_month') {
+                    $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
+                } elseif ($filter === 'this_year') {
+                    $query->whereYear('created_at', now()->year);
+                }
+            }
+        }
         
-        $incidents = $query->paginate(10);
+        $perPage = $request->has('limit') ? $request->limit : 10;
+        $incidents = $query->paginate($perPage);
         return response()->json($incidents);
     }
 
@@ -197,6 +241,76 @@ class IncidentDetailController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Incident location updated successfully'
+        ]);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $query = IncidentDetail::with(['user', 'location.barangayModel', 'emergencyType', 'responderLogs.responder'])->latest();
+        
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('search') && !empty($request->search)) {
+            $search = strtolower($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('incident_id', 'LIKE', "%{$search}%")
+                  ->orWhere('status', 'LIKE', "%{$search}%")
+                  ->orWhereHas('user', function ($q2) use ($search) {
+                      $q2->whereRaw("LOWER(CONCAT(first_name, ' ', last_name)) LIKE ?", ["%{$search}%"])
+                         ->orWhere('phone_number', 'LIKE', "%{$search}%");
+                  })
+                  ->orWhereHas('emergencyType', function ($q3) use ($search) {
+                      $q3->whereRaw("LOWER(emergency_name) LIKE ?", ["%{$search}%"]);
+                  })
+                  ->orWhereHas('location', function ($q4) use ($search) {
+                      $q4->whereRaw("LOWER(location) LIKE ?", ["%{$search}%"])
+                         ->orWhereHas('barangayModel', function ($q4_1) use ($search) {
+                             $q4_1->whereRaw("LOWER(barangay_name) LIKE ?", ["%{$search}%"]);
+                         });
+                  })
+                  ->orWhereHas('responderLogs.responder', function ($q5) use ($search) {
+                      $q5->whereRaw("LOWER(CONCAT(first_name, ' ', last_name)) LIKE ?", ["%{$search}%"]);
+                  });
+            });
+        }
+
+        if ($request->has('date_filter') && !empty($request->date_filter) && $request->date_filter !== 'all') {
+            $filter = $request->date_filter;
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filter)) {
+                $query->whereDate('created_at', $filter);
+            } else {
+                if ($filter === 'today') {
+                    $query->whereDate('created_at', today());
+                } elseif ($filter === 'this_week') {
+                    $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+                } elseif ($filter === 'this_month') {
+                    $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
+                } elseif ($filter === 'this_year') {
+                    $query->whereYear('created_at', now()->year);
+                }
+            }
+        }
+        
+        $incidents = $query->get();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.incidents', ['incidents' => $incidents]);
+        $pdf->setPaper('A4', 'landscape');
+
+        $filename = 'Incident_Report_' . time() . '.pdf';
+        
+        // Ensure directory exists
+        $path = storage_path('app/public/reports/incidents');
+        if (!\Illuminate\Support\Facades\File::exists($path)) {
+            \Illuminate\Support\Facades\File::makeDirectory($path, 0755, true);
+        }
+
+        $pdf->save($path . '/' . $filename);
+
+        return response()->json([
+            'success' => true,
+            'url' => asset('storage/reports/incidents/' . $filename)
         ]);
     }
 }

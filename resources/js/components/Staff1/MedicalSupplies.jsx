@@ -60,7 +60,7 @@ export default function MedicalSupplies() {
       element.style.backgroundColor = '#ffffff';
       element.style.fontFamily = '"Plus Jakarta Sans", "Helvetica Neue", sans-serif';
 
-      const title = 'Consumable Supplies Report';
+      const reportTitle = activeCategory === 'All' ? 'Consumable Supplies Report' : `${activeCategory} Report`;
       const filterText = `Category: ${activeCategory === 'All' ? 'All' : activeCategory} | Status: ${activeStatusFilter === 'All' ? 'All' : activeStatusFilter}`;
 
 
@@ -82,7 +82,7 @@ export default function MedicalSupplies() {
     element.innerHTML = `
       <div style="text-align: center; border-bottom: 2px solid #0056b3; padding-bottom: 15px; margin-bottom: 25px;">
         <h2 style="margin: 0; font-size: 18px; color: #0056b3; font-weight: 800; text-transform: uppercase;">Municipal Disaster Risk Reduction & Management Office</h2>
-        <h3 style="margin: 5px 0 0 0; font-size: 13px; color: #555; letter-spacing: 1px;">${title}</h3>
+        <h3 style="margin: 5px 0 0 0; font-size: 13px; color: #555; letter-spacing: 1px;">${reportTitle}</h3>
         <p style="margin: 3px 0 0 0; font-size: 11px; color: #888;">Filters: ${filterText}</p>
         <p style="margin: 3px 0 0 0; font-size: 11px; color: #888;">Generated Date: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
       </div>
@@ -125,7 +125,39 @@ export default function MedicalSupplies() {
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
 
-    window.html2pdf().set(opt).from(element).save();
+    window.html2pdf().set(opt).from(element).outputPdf('blob').then(async function(pdfBlob) {
+      try {
+        let generatedBy = "Staff (Inventory)";
+        const token = localStorage.getItem('staff1_token') || localStorage.getItem('admin_token');
+        if (token) {
+          const res = await fetch('/api/user', { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
+          const userData = await res.json();
+          if (userData && userData.first_name) {
+            generatedBy = `${userData.first_name} ${userData.last_name}`.trim();
+          }
+        }
+        
+        const formData = new FormData();
+        formData.append('file', pdfBlob, opt.filename);
+        formData.append('type', 'inventory');
+        formData.append('title', reportTitle);
+        formData.append('generated_by', generatedBy);
+
+        await fetch('/api/reports/upload', {
+          method: 'POST',
+          body: formData
+        });
+      } catch (err) {
+        console.warn('Failed to upload report to server:', err);
+      }
+      
+      // Also save to user's computer
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = opt.filename;
+      a.click();
+    });
     } catch (err) {
       console.error(err);
       alert('Error generating PDF');

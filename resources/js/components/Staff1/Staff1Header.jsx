@@ -13,10 +13,19 @@ export default function Staff1Header({ activeSection }) {
       try {
         const res = await fetch('/api/notifications');
         const data = await res.json();
-        setNotifications(data);
+        const staffData = data.filter(n => n.type !== 'report');
+        setNotifications(staffData);
 
-        const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-        const unreadAlerts = data.filter(n => n.type === 'event_alert' && !readIds.includes(n.id));
+        const today = new Date().toISOString().split('T')[0];
+        const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+        if (readData.date !== today) {
+            readData.date = today;
+            readData.ids = [];
+            localStorage.setItem('readNotificationsData', JSON.stringify(readData));
+        }
+
+        const readIds = readData.ids;
+        const unreadAlerts = staffData.filter(n => !readIds.includes(n.id));
 
         if (unreadAlerts.length > 0) {
           setCurrentNotification(unreadAlerts[0]);
@@ -40,24 +49,47 @@ export default function Staff1Header({ activeSection }) {
 
   const dismissNotification = () => {
     if (currentNotification) {
-      const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-      if (!readIds.includes(currentNotification.id)) {
-        readIds.push(currentNotification.id);
-        localStorage.setItem('readNotifications', JSON.stringify(readIds));
+      const today = new Date().toISOString().split('T')[0];
+      const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+      if (readData.date !== today) {
+        readData.date = today;
+        readData.ids = [];
       }
+
+      if (!readData.ids.includes(currentNotification.id)) {
+        readData.ids.push(currentNotification.id);
+        localStorage.setItem('readNotificationsData', JSON.stringify(readData));
+      }
+
+      const nextUnread = notifications.find(n => !readData.ids.includes(n.id));
+      if (nextUnread) {
+        setCurrentNotification(nextUnread);
+      } else {
+        setShowNotificationModal(false);
+        setCurrentNotification(null);
+      }
+    } else {
+      setShowNotificationModal(false);
+      setCurrentNotification(null);
     }
-    setShowNotificationModal(false);
-    setCurrentNotification(null);
   };
 
-  const markAsRead = (id) => {
-    const readIds = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-    if (!readIds.includes(id)) {
-      readIds.push(id);
-      localStorage.setItem('readNotifications', JSON.stringify(readIds));
-      // Force a re-render by creating a new array reference
-      setNotifications([...notifications]);
+  const handleNotificationClick = (n) => {
+    const today = new Date().toISOString().split('T')[0];
+    const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+    if (readData.date !== today) {
+        readData.date = today;
+        readData.ids = [];
     }
+
+    if (!readData.ids.includes(n.id)) {
+        readData.ids.push(n.id);
+        localStorage.setItem('readNotificationsData', JSON.stringify(readData));
+    }
+    
+    setCurrentNotification(n);
+    setShowNotificationModal(true);
+    setShowNotificationsMenu(false);
   };
 
   const handleLogout = () => {
@@ -114,11 +146,11 @@ export default function Staff1Header({ activeSection }) {
             title="Notifications"
           >
             <span className="text-xl">🔔</span>
-            {notifications.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-[#ef4444] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]">
-                {notifications.length}
-              </span>
-            )}
+              {(() => {
+                const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+                const unreadCount = notifications.filter(n => !readData.ids.includes(n.id)).length;
+                return unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>;
+              })()}
           </button>
 
           <button
@@ -144,12 +176,13 @@ export default function Staff1Header({ activeSection }) {
                   </div>
                 ) : (
                   notifications.map(n => {
-                    const isUnread = !(JSON.parse(localStorage.getItem('readNotifications') || '[]').includes(n.id));
+                    const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+                    const isUnread = !readData.ids.includes(n.id);
                     return (
                       <div 
                         key={n.id} 
-                        onClick={() => markAsRead(n.id)}
-                        className={`p-4 border-b border-[#202028] last:border-0 cursor-pointer transition-colors ${isUnread ? 'bg-[rgba(10,132,255,0.05)] hover:bg-[rgba(10,132,255,0.08)]' : 'hover:bg-[#181822]'}`}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`p-4 border-b border-[#202028] last:border-0 cursor-pointer transition-colors ${isUnread ? 'bg-[rgba(10,132,255,0.05)]' : 'hover:bg-[#181822]'}`}
                       >
                         <div className="flex justify-between items-start mb-1">
                           <span className="font-semibold text-white text-sm pr-4">{n.title}</span>

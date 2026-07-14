@@ -34,8 +34,10 @@ export default function AdminDashboard({ setActiveSection }) {
   });
 
   const usersList = usersData?.data || [];
-  const pendingUsersCount = usersList.filter(u => u.status === 'pending').length;
+  const pendingUsersCount = usersList.filter(u => !u.approved && u.role !== 'resident' && u.role !== 'admin').length;
   const approvedUsersCount = usersData?.total || 0;
+
+  const recentStaff = usersList.filter(u => u.role !== 'resident' && u.role !== 'admin');
 
   const totalIncidents = incidentsData?.total || 0;
   const inventoryTotal = invData?.total || 0;
@@ -144,9 +146,9 @@ export default function AdminDashboard({ setActiveSection }) {
                 </tr>
               </thead>
               <tbody>
-                {usersList.length === 0 ? (
-                  <tr><td colSpan="3" className="p-6 text-center text-gray-500 text-sm">No users found.</td></tr>
-                ) : [...usersList].sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5).map(user => (
+                {recentStaff.length === 0 ? (
+                  <tr><td colSpan="3" className="p-6 text-center text-gray-500 text-sm">No recent registrations found.</td></tr>
+                ) : [...recentStaff].sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5).map(user => (
                   <tr key={user.id} className="hover:bg-[rgba(255,255,255,0.02)] transition-colors border-b border-[#1f1f26] last:border-0">
                     <td className="p-4 text-white font-medium text-sm">
                       <div className="flex flex-col">
@@ -157,15 +159,16 @@ export default function AdminDashboard({ setActiveSection }) {
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
                         user.role === 'admin' ? 'bg-[#ff453a]/10 text-[#ff453a] border-[#ff453a]/20' : 
-                        user.role === 'staff_1' ? 'bg-[#0a84ff]/10 text-[#0a84ff] border-[#0a84ff]/20' : 
+                        user.role === 'staff1' ? 'bg-[#0a84ff]/10 text-[#0a84ff] border-[#0a84ff]/20' : 
+                        user.role === 'staff2' ? 'bg-[#bf5af2]/10 text-[#bf5af2] border-[#bf5af2]/20' :
                         'bg-[#34c759]/10 text-[#34c759] border-[#34c759]/20'
                       }`}>
                         {user.role}
                       </span>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-bold border ${user.status === 'pending' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a] border-[#ff9f0a]/20' : 'bg-[#34c759]/10 text-[#34c759] border-[#34c759]/20'}`}>
-                        {user.status}
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${!user.approved ? 'bg-[#ff9f0a]/10 text-[#ff9f0a] border-[#ff9f0a]/20' : 'bg-[#34c759]/10 text-[#34c759] border-[#34c759]/20'}`}>
+                        {!user.approved ? 'pending' : 'approved'}
                       </span>
                     </td>
                   </tr>

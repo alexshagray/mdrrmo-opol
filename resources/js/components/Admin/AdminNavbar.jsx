@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function AdminNavbar({ adminUser, notifications, showNotificationsMenu, setShowNotificationsMenu, handleLogout, onNotificationClick }) {
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
     return (
-        <nav className="border-b border-[#1f1f26] bg-[#0c0c10]/80 backdrop-blur-md sticky top-0 z-50">
+        <nav className="border-b border-[#1f1f26] bg-[#0c0c10]/80 backdrop-blur-md sticky top-0 z-[100]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-20">
                     <div className="flex items-center gap-3">
@@ -26,7 +27,11 @@ export default function AdminNavbar({ adminUser, notifications, showNotification
                                 className="bg-[#181822] hover:bg-[#20202b] border border-[#2b2b35] text-gray-300 p-2 rounded-xl transition-all cursor-pointer relative"
                             >
                                 🔔
-                                {notifications.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{notifications.length}</span>}
+                                {(() => {
+                                    const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+                                    const unreadCount = notifications.filter(n => !readData.ids.includes(n.id)).length;
+                                    return unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>;
+                                })()}
                             </button>
                             {showNotificationsMenu && (
                                 <div className="absolute top-12 right-0 w-80 bg-[#111116] border border-[#202028] rounded-xl shadow-2xl z-50 overflow-hidden">
@@ -39,7 +44,8 @@ export default function AdminNavbar({ adminUser, notifications, showNotification
                                             <div className="p-6 text-center text-gray-500 text-xs">No notifications yet</div>
                                         ) : (
                                             notifications.map(n => {
-                                                const isUnread = !(JSON.parse(localStorage.getItem('readNotifications') || '[]').includes(n.id));
+                                                const readData = JSON.parse(localStorage.getItem('readNotificationsData') || '{"date":"","ids":[]}');
+                                                const isUnread = !readData.ids.includes(n.id);
                                                 return (
                                                     <div 
                                                         key={n.id} 
@@ -65,7 +71,7 @@ export default function AdminNavbar({ adminUser, notifications, showNotification
                             )}
                         </div>
                         <button
-                            onClick={handleLogout}
+                            onClick={() => setShowLogoutModal(true)}
                             className="bg-[#181822] hover:bg-red-950/30 border border-[#2b2b35] hover:border-red-800/50 text-gray-300 hover:text-red-400 text-sm px-4 py-2 rounded-xl transition-all cursor-pointer"
                         >
                             Sign Out
@@ -73,6 +79,40 @@ export default function AdminNavbar({ adminUser, notifications, showNotification
                     </div>
                 </div>
             </div>
+
+            {/* Logout Confirmation Modal */}
+            {showLogoutModal && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[1000] p-4 backdrop-blur-sm">
+                    <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl w-full max-w-sm shadow-2xl animate-[popIn_0.3s_cubic-bezier(0.175,0.885,0.32,1.275)] overflow-hidden">
+                        <div className="flex flex-col items-center p-6 text-center">
+                            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/20">
+                                <span className="text-red-500 text-3xl">🚪</span>
+                            </div>
+                            <h3 className="text-white text-lg font-bold mb-2">Sign Out</h3>
+                            <p className="text-gray-400 text-sm mb-6">
+                                Are you sure you want to log out of the Admin Control Center?
+                            </p>
+                            <div className="flex gap-3 w-full">
+                                <button 
+                                    onClick={() => setShowLogoutModal(false)}
+                                    className="flex-1 py-2.5 bg-[#181822] border border-[#2b2b35] text-gray-300 rounded-lg font-semibold hover:bg-[#20202b] transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setShowLogoutModal(false);
+                                        handleLogout();
+                                    }}
+                                    className="flex-1 py-2.5 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                                >
+                                    Yes, Sign Out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </nav>
     );
 }

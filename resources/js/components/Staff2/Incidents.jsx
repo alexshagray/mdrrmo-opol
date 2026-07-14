@@ -1,17 +1,32 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 
 export default function Incidents({ setNotifications }) {
   const [incidentPage, setIncidentPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState('all');
   const queryClient = useQueryClient();
 
-  const { data: incidentsData, isLoading } = useQuery({
-    queryKey: ['incidents', 'all', incidentPage],
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setIncidentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setIncidentPage(1);
+  }, [dateFilter]);
+
+  const { data: incidentsData, isLoading, isFetching } = useQuery({
+    queryKey: ['incidents', 'all', incidentPage, debouncedSearch, dateFilter],
     queryFn: async () => {
-      const response = await fetch(`/api/incidents?page=${incidentPage}`);
+      const response = await fetch(`/api/incidents?page=${incidentPage}&search=${encodeURIComponent(debouncedSearch)}&date_filter=${dateFilter}`);
       return response.json();
     },
-    keepPreviousData: true
+    placeholderData: keepPreviousData
   });
 
   const incidents = incidentsData?.data || [];
@@ -125,22 +140,96 @@ export default function Incidents({ setNotifications }) {
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportIncidentsToPDF = async () => {
+    if (incidents.length === 0) return;
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      if (dateFilter && dateFilter !== 'all') params.append('date_filter', dateFilter);
+
+      const response = await fetch(`/api/incidents/export-pdf?${params.toString()}`);
+      const data = await response.json();
+
+      if (data.success && data.url) {
+        window.open(data.url, '_blank');
+      } else {
+        alert('Failed to generate PDF. Please try again.');
+      }
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('An error occurred while generating the PDF.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (isLoading && incidents.length === 0) {
     return <div className="p-8 text-center text-gray-400">Loading incidents...</div>;
   }
 
   return (
     <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-6 shadow-xl">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-white m-0">Manage Incident Reports</h2>
-        {incidents.length > 0 && (
-          <button 
-            onClick={handleDeleteAllIncidents}
-            className="bg-[rgba(239,68,68,0.15)] hover:bg-[rgba(239,68,68,0.25)] border border-[#ef4444] text-[#ef4444] px-4 py-2 rounded-lg font-bold text-sm transition-all"
-          >
-            🗑️ Delete All Items
-          </button>
-        )}
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold text-white m-0">Manage Incident Reports</h2>
+          {isFetching && !isLoading && (
+            <div className="w-5 h-5 border-2 border-[#0a84ff]/30 border-t-[#0a84ff] rounded-full animate-spin"></div>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input 
+            type="text" 
+            placeholder="Search incidents..." 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-[#181822] border border-[#2b2b35] text-white px-4 py-2 rounded-lg focus:outline-none focus:border-[#0a84ff] transition-colors text-sm w-full sm:w-64"
+          />
+          <div className="relative">
+            <input 
+              type="date"
+              value={dateFilter === 'all' ? '' : dateFilter}
+              onChange={(e) => setDateFilter(e.target.value || 'all')}
+              className="bg-[#181822] border border-[#2b2b35] text-white px-4 py-2 rounded-lg focus:outline-none focus:border-[#0a84ff] transition-colors text-sm cursor-pointer w-[150px] [color-scheme:dark]"
+              title="Select a specific date to filter"
+            />
+            {dateFilter !== 'all' && (
+              <button 
+                onClick={() => setDateFilter('all')}
+                className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white bg-[#181822] px-1"
+                title="Clear date filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {incidents.length > 0 && (
+            <>
+              <button 
+                onClick={exportIncidentsToPDF}
+                disabled={isExporting}
+                className="bg-[rgba(10,132,255,0.15)] hover:bg-[rgba(10,132,255,0.25)] border border-[#0a84ff] text-[#0a84ff] px-4 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isExporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-[#0a84ff]/30 border-t-[#0a84ff] rounded-full animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>📄 Print PDF</>
+                )}
+              </button>
+              <button 
+                onClick={handleDeleteAllIncidents}
+                className="bg-[rgba(239,68,68,0.15)] hover:bg-[rgba(239,68,68,0.25)] border border-[#ef4444] text-[#ef4444] px-4 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap"
+              >
+                🗑️ Delete All Items
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {incidents.length === 0 ? (
         <div className="p-8 text-center bg-[#181822] border border-[#2b2b35] rounded-xl text-gray-400">
@@ -153,6 +242,7 @@ export default function Incidents({ setNotifications }) {
               <tr className="bg-[#181822]">
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35] rounded-tl-lg">Name of Caller</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Emergency Type</th>
+                <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Responder</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Phone Number</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Location</th>
                 <th className="p-4 text-gray-400 font-semibold text-sm border-b border-[#2b2b35]">Date/Time Reported</th>
@@ -170,6 +260,9 @@ export default function Incidents({ setNotifications }) {
                     <span className="bg-[#181822] border border-[#2b2b35] text-gray-300 px-2.5 py-1 rounded-md text-xs font-semibold" style={{ color: incident.emergency_type?.color_hex || '#d1d5db' }}>
                       {incident.emergency_type?.emoji_icon} {incident.emergency_type?.name || (typeof incident.emergency_type === 'string' ? incident.emergency_type : 'Not specified')}
                     </span>
+                  </td>
+                  <td className="p-4 border-b border-[#1f1f26] text-gray-300 text-sm">
+                    {incident.responderLogs?.[0]?.responder ? `${incident.responderLogs[0].responder.first_name} ${incident.responderLogs[0].responder.last_name}` : <span className="text-gray-500 italic">None</span>}
                   </td>
                   <td className="p-4 border-b border-[#1f1f26] text-gray-300 text-sm">{incident.user?.phone_number || incident.caller_number || 'Unknown'}</td>
                   <td className="p-4 border-b border-[#1f1f26] text-gray-300 text-sm">

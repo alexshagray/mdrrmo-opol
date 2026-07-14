@@ -63,6 +63,39 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
     refetchInterval: 3000
   });
 
+  // Dedicated Completed Incidents State
+  const [completedIncidentsPage, setCompletedIncidentsPage] = useState(1);
+  const [completedSearch, setCompletedSearch] = useState('');
+  const [debouncedCompletedSearch, setDebouncedCompletedSearch] = useState('');
+  const [completedDateFilter, setCompletedDateFilter] = useState('');
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedCompletedSearch(completedSearch);
+      setCompletedIncidentsPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [completedSearch]);
+
+  React.useEffect(() => {
+    setCompletedIncidentsPage(1);
+  }, [completedDateFilter]);
+
+  const { data: completedIncidentsData, isLoading: isLoadingCompleted, isFetching: isFetchingCompleted } = useQuery({
+    queryKey: ['completedIncidentsTab', completedIncidentsPage, debouncedCompletedSearch, completedDateFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams({ status: 'completed', page: completedIncidentsPage, search: debouncedCompletedSearch, limit: 10 });
+      if (completedDateFilter) params.append('date_filter', completedDateFilter);
+      const response = await fetch(`/api/incidents?${params.toString()}`);
+      return response.json();
+    },
+    keepPreviousData: true,
+    refetchInterval: 5000
+  });
+
+  const dedicatedCompletedIncidents = completedIncidentsData?.data || [];
+  const onlineRespondersCount = Object.values(responders).filter(r => (r.status || '').toLowerCase() !== 'offline').length;
+
   const allIncidents = incidentsData?.data || [];
   // Exclude rejected/cancelled
   const validIncidents = allIncidents.filter(
@@ -107,7 +140,7 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
         </div>
         <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex flex-col justify-center">
           <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">Responders Online</span>
-          <span className="text-4xl font-bold text-[#0a84ff]">{Object.keys(responders).length}</span>
+          <span className="text-4xl font-bold text-[#0a84ff]">{onlineRespondersCount}</span>
         </div>
         <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl p-5 shadow-lg flex flex-col justify-center">
           <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">Total Today</span>
@@ -152,7 +185,7 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
               >
                 <span className="text-base text-green-500">✅</span> Completed
                 <span className="bg-[#34c759] text-white text-[10px] px-2 py-0.5 rounded-full">
-                  {completedIncidents.length}
+                  {completedIncidentsData?.total || completedIncidents.length}
                 </span>
               </button>
               <button
@@ -161,7 +194,7 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
               >
                 <span className="text-base text-blue-500">🚑</span> Responders
                 <span className="bg-[#0a84ff] text-white text-[10px] px-2 py-0.5 rounded-full">
-                  {Object.keys(responders).length}
+                  {onlineRespondersCount}
                 </span>
               </button>
             </div>
@@ -212,33 +245,88 @@ export default function Staff2Dashboard({ responders, setNotifications }) {
 
               {/* Completed Incidents Tab */}
               {activeTab === 'completed' && (
-                <div className="flex flex-col gap-3">
-                  {completedIncidents.length === 0 ? (
-                    <div className="text-center text-xs text-gray-500 mt-10">
-                      <div className="text-3xl mb-2">📋</div>
-                      No completed incidents yet
-                    </div>
-                  ) : (
-                    completedIncidents.map(inc => (
-                      <IncidentCard
-                        key={inc.id || inc.incident_id}
-                        inc={inc}
-                        onClick={() => handleIncidentClick(inc)}
+                <div className="flex flex-col h-full gap-3">
+                  <div className="flex flex-col gap-2 shrink-0 border-b border-[#1f1f26] pb-3 mb-1">
+                    <input 
+                      type="text"
+                      placeholder="e.g. enter incident id..."
+                      value={completedSearch}
+                      onChange={(e) => setCompletedSearch(e.target.value)}
+                      className="w-full bg-[#181822] border border-[#2b2b35] text-white text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#0a84ff] transition-colors"
+                    />
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={completedDateFilter}
+                        onChange={(e) => { setCompletedDateFilter(e.target.value); setCompletedIncidentsPage(1); }}
+                        className="w-full bg-[#181822] border border-[#2b2b35] text-white text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#0a84ff] transition-colors [color-scheme:dark]"
+                        title="Filter by specific date"
                       />
-                    ))
+                      {completedDateFilter && (
+                        <button
+                          onClick={() => setCompletedDateFilter('')}
+                          className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs px-1"
+                          title="Clear date filter"
+                        >✕</button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col gap-3 flex-1 overflow-y-auto relative min-h-[100px]">
+                    {isFetchingCompleted && !isLoadingCompleted && (
+                      <div className="absolute top-2 right-2 w-4 h-4 border-2 border-[#0a84ff]/30 border-t-[#0a84ff] rounded-full animate-spin"></div>
+                    )}
+                    {isLoadingCompleted ? (
+                      <div className="text-center text-xs text-gray-500 mt-10">Loading...</div>
+                    ) : dedicatedCompletedIncidents.length === 0 ? (
+                      <div className="text-center text-xs text-gray-500 mt-10">
+                        <div className="text-3xl mb-2">📋</div>
+                        No completed incidents found
+                      </div>
+                    ) : (
+                      dedicatedCompletedIncidents.map(inc => (
+                        <IncidentCard
+                          key={inc.id || inc.incident_id}
+                          inc={inc}
+                          onClick={() => handleIncidentClick(inc)}
+                        />
+                      ))
+                    )}
+                  </div>
+                  
+                  {completedIncidentsData?.last_page > 1 && (
+                    <div className="flex items-center justify-between mt-auto pt-2 pb-2 shrink-0 border-t border-[#1f1f26]">
+                      <button
+                        onClick={() => setCompletedIncidentsPage(p => Math.max(1, p - 1))}
+                        disabled={!completedIncidentsData.prev_page_url || isFetchingCompleted}
+                        className="px-3 py-1.5 bg-[#1a1a2e] border border-white/10 text-white text-[11px] font-bold rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
+                        Page {completedIncidentsData.current_page} of {completedIncidentsData.last_page}
+                      </span>
+                      <button
+                        onClick={() => setCompletedIncidentsPage(p => p + 1)}
+                        disabled={!completedIncidentsData.next_page_url || isFetchingCompleted}
+                        className="px-3 py-1.5 bg-[#1a1a2e] border border-white/10 text-white text-[11px] font-bold rounded-lg hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
 
               {/* Responders Tab */}
               {activeTab === 'responders' && (
-                Object.keys(responders).length === 0 ? (
+                onlineRespondersCount === 0 ? (
                   <div className="text-center text-xs text-gray-500 mt-10">
                     <div className="text-3xl mb-2">📡</div>
                     No active responders
                   </div>
                 ) : (
-                  Object.values(responders).map(resp => (
+                  Object.values(responders).filter(r => (r.status || '').toLowerCase() !== 'offline').map(resp => (
                     <div 
                       key={resp.responderId} 
                       onClick={() => {

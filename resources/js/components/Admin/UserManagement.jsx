@@ -8,6 +8,27 @@ export default function UserManagement({ token, handleLogout }) {
     const [filterTab, setFilterTab] = useState('all'); // 'all', 'pending', 'approved'
     const queryClient = useQueryClient();
 
+    // Create Account Modal State
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createFormData, setCreateFormData] = useState({
+        first_name: '',
+        last_name: '',
+        email: '',
+        role: 'staff1',
+        password: '',
+        password_confirmation: ''
+    });
+    const [createFormErrors, setCreateFormErrors] = useState({});
+
+    // Toast Notification State
+    const [toast, setToast] = useState(null);
+    const [rejectModalId, setRejectModalId] = useState(null);
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
+
     const { data: usersData, isLoading: loading, error: queryError, refetch: fetchUsers } = useQuery({
         queryKey: ['adminUsers', page],
         queryFn: async () => {
@@ -45,8 +66,11 @@ export default function UserManagement({ token, handleLogout }) {
             if (!res.ok) throw new Error('Approval failed.');
             return res.json();
         },
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
-        onError: (e) => alert(e.message),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+            showToast('User approved successfully!');
+        },
+        onError: (e) => showToast(e.message, 'error'),
         onSettled: () => setActionLoadingId(null)
     });
 
@@ -62,10 +86,76 @@ export default function UserManagement({ token, handleLogout }) {
             if (!res.ok) throw new Error('Rejection failed.');
             return res.json();
         },
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
-        onError: (e) => alert(e.message),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+            showToast('User rejected and removed.');
+        },
+        onError: (e) => showToast(e.message, 'error'),
         onSettled: () => setActionLoadingId(null)
     });
+
+    const createStaffMutation = useMutation({
+        mutationFn: async (data) => {
+            const res = await fetch(`/api/admin/users`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(data)
+            });
+            const resData = await res.json();
+            if (!res.ok) {
+                if (res.status === 422) throw { validationErrors: resData.errors };
+                throw new Error(resData.message || 'Creation failed.');
+            }
+            return resData;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+            setShowCreateModal(false);
+            setCreateFormData({
+                first_name: '',
+                last_name: '',
+                email: '',
+                role: 'staff1',
+                password: '',
+                password_confirmation: ''
+            });
+            setCreateFormErrors({});
+            showToast('Staff account created successfully!');
+        },
+        onError: (e) => {
+            if (e.validationErrors) {
+                setCreateFormErrors(e.validationErrors);
+            } else {
+                showToast(e.message, 'error');
+            }
+        }
+    });
+
+    const handleCreateStaff = (e) => {
+        e.preventDefault();
+        setCreateFormErrors({});
+        
+        // Basic client-side validation
+        const errors = {};
+        if (!createFormData.first_name) errors.first_name = ['First Name is required'];
+        if (!createFormData.last_name) errors.last_name = ['Last Name is required'];
+        if (!createFormData.email) errors.email = ['Email is required'];
+        if (!createFormData.password) errors.password = ['Password is required'];
+        if (createFormData.password !== createFormData.password_confirmation) {
+            errors.password_confirmation = ['Passwords do not match'];
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setCreateFormErrors(errors);
+            return;
+        }
+
+        createStaffMutation.mutate(createFormData);
+    };
 
     const handleApprove = (id) => {
         setActionLoadingId(id);
@@ -73,9 +163,14 @@ export default function UserManagement({ token, handleLogout }) {
     };
 
     const handleReject = (id) => {
-        if (!confirm('Are you sure you want to reject and delete this registration request?')) return;
-        setActionLoadingId(id);
-        rejectMutation.mutate(id);
+        setRejectModalId(id);
+    };
+
+    const confirmReject = () => {
+        if (!rejectModalId) return;
+        setActionLoadingId(rejectModalId);
+        rejectMutation.mutate(rejectModalId);
+        setRejectModalId(null);
     };
 
     // Derived State Filters
@@ -138,10 +233,15 @@ export default function UserManagement({ token, handleLogout }) {
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 placeholder="Search name or email..."
-                                className="w-full sm:w-64 bg-[#181822] border border-[#2b2b35] pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:border-[#0a84ff] transition-all text-white placeholder-gray-500"
+                                className="pl-10 pr-4 py-2.5 w-full bg-[#181822] border border-[#202028] text-sm rounded-xl focus:outline-none focus:border-[#0a84ff] focus:ring-1 focus:ring-[#0a84ff] text-white placeholder-gray-500 transition-all shadow-inner"
                             />
                         </div>
-
+                        <button 
+                            onClick={() => setShowCreateModal(true)}
+                            className="bg-[#0a84ff] hover:bg-[#005bb5] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-[#0a84ff]/20 whitespace-nowrap flex items-center justify-center gap-2"
+                        >
+                            <span>+</span> Create Account
+                        </button>
                         <button
                             onClick={fetchUsers}
                             className="bg-[#181822] hover:bg-[#20202b] border border-[#2b2b35] p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center"
@@ -305,6 +405,172 @@ export default function UserManagement({ token, handleLogout }) {
                     </div>
                 </div>
             </div>
+
+            {/* Create Staff Account Modal */}
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                    <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl w-full max-w-md shadow-2xl animate-[popIn_0.3s_cubic-bezier(0.175,0.885,0.32,1.275)] overflow-hidden">
+                        <div className="flex justify-between items-center p-5 border-b border-[#1f1f26] bg-[#181822]">
+                            <h3 className="m-0 text-white text-lg font-bold flex items-center gap-2">
+                                <span className="bg-[#0a84ff]/20 text-[#0a84ff] w-8 h-8 rounded-lg flex items-center justify-center">👤</span>
+                                Create Staff Account
+                            </h3>
+                            <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-white transition-colors">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateStaff} className="p-6">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">First Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={createFormData.first_name}
+                                            onChange={(e) => setCreateFormData({...createFormData, first_name: e.target.value})}
+                                            className="w-full bg-[#181822] border border-[#2b2b35] rounded-lg px-3 py-2 text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors"
+                                            placeholder="John"
+                                        />
+                                        {createFormErrors.first_name && <p className="text-red-500 text-xs mt-1">{createFormErrors.first_name[0]}</p>}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Last Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={createFormData.last_name}
+                                            onChange={(e) => setCreateFormData({...createFormData, last_name: e.target.value})}
+                                            className="w-full bg-[#181822] border border-[#2b2b35] rounded-lg px-3 py-2 text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors"
+                                            placeholder="Doe"
+                                        />
+                                        {createFormErrors.last_name && <p className="text-red-500 text-xs mt-1">{createFormErrors.last_name[0]}</p>}
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Email Address</label>
+                                    <input 
+                                        type="email" 
+                                        value={createFormData.email}
+                                        onChange={(e) => setCreateFormData({...createFormData, email: e.target.value})}
+                                        className="w-full bg-[#181822] border border-[#2b2b35] rounded-lg px-3 py-2 text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors"
+                                        placeholder="john@example.com"
+                                    />
+                                    {createFormErrors.email && <p className="text-red-500 text-xs mt-1">{createFormErrors.email[0]}</p>}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Role</label>
+                                    <select 
+                                        value={createFormData.role}
+                                        onChange={(e) => setCreateFormData({...createFormData, role: e.target.value})}
+                                        className="w-full bg-[#181822] border border-[#2b2b35] rounded-lg px-3 py-2 text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors"
+                                    >
+                                        <option value="staff1">Staff 1 (Inventory)</option>
+                                        <option value="staff2">Staff 2 (Incident)</option>
+                                    </select>
+                                    {createFormErrors.role && <p className="text-red-500 text-xs mt-1">{createFormErrors.role[0]}</p>}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Password</label>
+                                        <input 
+                                            type="password" 
+                                            value={createFormData.password}
+                                            onChange={(e) => setCreateFormData({...createFormData, password: e.target.value})}
+                                            className="w-full bg-[#181822] border border-[#2b2b35] rounded-lg px-3 py-2 text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors"
+                                            placeholder="••••••••"
+                                        />
+                                        {createFormErrors.password && <p className="text-red-500 text-xs mt-1">{createFormErrors.password[0]}</p>}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-1">Confirm Password</label>
+                                        <input 
+                                            type="password" 
+                                            value={createFormData.password_confirmation}
+                                            onChange={(e) => setCreateFormData({...createFormData, password_confirmation: e.target.value})}
+                                            className="w-full bg-[#181822] border border-[#2b2b35] rounded-lg px-3 py-2 text-white text-sm focus:border-[#0a84ff] focus:outline-none transition-colors"
+                                            placeholder="••••••••"
+                                        />
+                                        {createFormErrors.password_confirmation && <p className="text-red-500 text-xs mt-1">{createFormErrors.password_confirmation[0]}</p>}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-3 mt-8 pt-4 border-t border-[#1f1f26]">
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowCreateModal(false)}
+                                    className="flex-1 py-2.5 bg-transparent border border-[#2b2b35] text-gray-300 rounded-lg font-semibold hover:bg-[#2b2b35] transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={createStaffMutation.isPending}
+                                    className="flex-1 py-2.5 bg-[#0a84ff] text-white rounded-lg font-semibold hover:bg-[#005bb5] transition-colors shadow-lg shadow-[#0a84ff]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {createStaffMutation.isPending ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        'Create Account'
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Reject Confirmation Modal */}
+            {rejectModalId && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                    <div className="bg-[#111116] border border-[#1f1f26] rounded-2xl w-full max-w-sm shadow-2xl animate-[popIn_0.3s_cubic-bezier(0.175,0.885,0.32,1.275)] overflow-hidden">
+                        <div className="flex flex-col items-center p-6 text-center">
+                            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/20">
+                                <span className="text-red-500 text-3xl">⚠️</span>
+                            </div>
+                            <h3 className="text-white text-lg font-bold mb-2">Are you absolutely sure?</h3>
+                            <p className="text-gray-400 text-sm mb-6">
+                                This will reject and permanently delete this registration request. This action cannot be undone.
+                            </p>
+                            <div className="flex gap-3 w-full">
+                                <button 
+                                    onClick={() => setRejectModalId(null)}
+                                    className="flex-1 py-2.5 bg-[#181822] border border-[#2b2b35] text-gray-300 rounded-lg font-semibold hover:bg-[#20202b] transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={confirmReject}
+                                    className="flex-1 py-2.5 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                                >
+                                    Yes, Reject
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className={`fixed bottom-6 right-6 z-[150] flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl animate-[popIn_0.3s_cubic-bezier(0.175,0.885,0.32,1.275)] ${
+                    toast.type === 'error' 
+                    ? 'bg-red-500/10 border border-red-500/20 text-red-500' 
+                    : 'bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981]'
+                }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        toast.type === 'error' ? 'bg-red-500/20' : 'bg-[#10b981]/20'
+                    }`}>
+                        {toast.type === 'error' ? '⚠️' : '✓'}
+                    </div>
+                    <span className="font-semibold text-sm">{toast.message}</span>
+                </div>
+            )}
         </main>
     );
 }

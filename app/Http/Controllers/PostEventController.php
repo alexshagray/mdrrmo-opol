@@ -30,14 +30,11 @@ class PostEventController extends Controller
 
         $event = PostEvent::create($validated);
 
-        // Auto-generate global notification
-        // SystemNotification::create([
-        //     'title' => 'New Event Scheduled: ' . $event->title,
-        //     'message' => 'A new event has been scheduled for ' . \Carbon\Carbon::parse($event->event_date)->format('M d, Y h:i A') . ' at ' . ($event->location ?? 'TBA') . '.',
-        //     'type' => 'event_alert',
-        //     'target' => 'all',
-        //     'related_id' => $event->id,
-        // ]);
+        try {
+            \Illuminate\Support\Facades\Http::timeout(3)->post('http://localhost:3000/api/new-notification', []);
+        } catch (\Exception $e) {
+            // Ignore if node server is down
+        }
 
         return response()->json($event, 201);
     }

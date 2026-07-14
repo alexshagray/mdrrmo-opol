@@ -36,6 +36,7 @@ Route::get('/patient_care_records', [PatientCareRecordController::class, 'index'
 Route::delete('/patient_care_records/{id}', [PatientCareRecordController::class, 'destroy']);
 Route::put('/patient_care_records/{id}', [PatientCareRecordController::class, 'update']);
 
+Route::get('/incidents/export-pdf', [IncidentDetailController::class, 'exportPdf']);
 Route::get('/incidents', [IncidentDetailController::class, 'index']);
 Route::get('/map/incidents', [IncidentDetailController::class, 'mapIncidents']);
 Route::delete('/incident_details', [IncidentDetailController::class, 'destroyAll']);
@@ -57,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Admin Management Routes
     Route::get('/admin/users', [AdminController::class, 'users']);
+    Route::post('/admin/users', [AdminController::class, 'storeStaff']);
     Route::post('/admin/users/{id}/approve', [AdminController::class, 'approve']);
     Route::delete('/admin/users/{id}', [AdminController::class, 'reject']);
     
@@ -79,9 +81,12 @@ Route::post('inventory/{id}/restore', [InventoryController::class, 'restore']);
 Route::post('inventory/bulk-upload', [InventoryController::class, 'bulkUpload']);
 Route::apiResource('inventory', InventoryController::class);
 
-Route::get('/notifications', function () {
-    return response()->json([]);
-});
+use App\Http\Controllers\NotificationController;
+Route::get('/notifications', [NotificationController::class, 'index']);
+
+use App\Http\Controllers\ReportController;
+Route::get('/reports', [ReportController::class, 'index']);
+Route::post('/reports/upload', [ReportController::class, 'store']);
 
 // Post Events & Notifications
 Route::apiResource('post_events', PostEventController::class);
